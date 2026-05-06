@@ -59,9 +59,11 @@ class HaSentinelCard extends HTMLElement {
     this._header.className = "card-header";
     this._card.appendChild(this._header);
 
-    // Problems summary row (native)
+    // Summary row wrapper
+    this._summaryWrapper = document.createElement("div");
     this._summaryRow = document.createElement("hui-generic-entity-row");
-    this._card.appendChild(this._summaryRow);
+    this._summaryWrapper.appendChild(this._summaryRow);
+    this._card.appendChild(this._summaryWrapper);
 
     // Divider after summary
     this._divider = document.createElement("div");
@@ -69,6 +71,8 @@ class HaSentinelCard extends HTMLElement {
     this._card.appendChild(this._divider);
 
     this._list = document.createElement("div");
+    this._list.id = "states";
+    this._list.className = "card-content";
     this._card.appendChild(this._list);
 
     this._footer = document.createElement("div");
@@ -131,7 +135,7 @@ class HaSentinelCard extends HTMLElement {
     // Summary row — sensor.sentinel_problems
     const problemsEntity = this._findProblemsEntity();
     if (problemsEntity) {
-      this._summaryRow.style.display = "";
+      this._summaryWrapper.style.display = "";
       this._divider.style.display = "";
       this._summaryRow.hass = this._hass;
       this._summaryRow.config = {
@@ -139,7 +143,7 @@ class HaSentinelCard extends HTMLElement {
         name: "Problèmes détectés",
       };
     } else {
-      this._summaryRow.style.display = "none";
+      this._summaryWrapper.style.display = "none";
       this._divider.style.display = "none";
     }
 
@@ -168,21 +172,42 @@ class HaSentinelCard extends HTMLElement {
     const existing = Array.from(this._list.children);
 
     entities.forEach((entity, i) => {
-      let row = existing[i];
-      if (!row || row.tagName.toLowerCase() !== "hui-generic-entity-row") {
+      let wrapper = existing[i];
+      let row;
+
+      if (!wrapper || wrapper.tagName.toLowerCase() !== "div") {
+        wrapper = document.createElement("div");
         row = document.createElement("hui-generic-entity-row");
+        wrapper.appendChild(row);
         if (existing[i]) {
-          this._list.replaceChild(row, existing[i]);
+          this._list.replaceChild(wrapper, existing[i]);
         } else {
-          this._list.appendChild(row);
+          this._list.appendChild(wrapper);
+        }
+      } else {
+        row = wrapper.querySelector("hui-generic-entity-row");
+        if (!row) {
+          row = document.createElement("hui-generic-entity-row");
+          wrapper.appendChild(row);
         }
       }
 
       row.hass = this._hass;
       row.config = {
         entity: entity.entity_id,
-        name: (entity.attributes.friendly_name || entity.entity_id)
-          .replace(/^Sentinel\s+/i, ""),
+        secondary_info: entity.attributes.reason || null,
+      };
+    });
+
+    // Remove extra wrappers
+    while (this._list.children.length > entities.length) {
+      this._list.removeChild(this._list.lastChild);
+    }
+      }
+
+      row.hass = this._hass;
+      row.config = {
+        entity: entity.entity_id,
         secondary_info: entity.attributes.reason || null,
       };
     });
