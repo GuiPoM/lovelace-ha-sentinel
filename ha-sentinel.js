@@ -11,7 +11,7 @@
  * Requires: https://github.com/GuiPoM/ha-sentinel
  */
 
-const CARD_VERSION = "0.4.0";
+const CARD_VERSION = "0.4.1";
 
 // State color map matching HA's --state-binary_sensor-problem-*-color
 const COLOR = {
@@ -118,7 +118,11 @@ class HaSentinelCard extends HTMLElement {
       const severity  = isProblem ? (e.attributes.severity || "warning") : "ok";
       const color     = isProblem ? COLOR[severity] || COLOR.warning : COLOR.off;
       const icon      = isProblem ? ICON[severity]  || ICON.warning  : ICON.ok;
-      const name      = (e.attributes.friendly_name || e.entity_id).replace(/^Sentinel\s+/i, "");
+      const fullName  = (e.attributes.friendly_name || e.entity_id).replace(/^Sentinel\s+/i, "");
+      const domain    = e.attributes.domain || "";
+      // Strip "(domain)" from name and put domain as secondary
+      const name      = fullName.replace(/\s*\([^)]+\)\s*$/, "").trim() || fullName;
+      const secondary = domain || (e.attributes.reason || "");
       const reason    = e.attributes.reason || "";
       const stateStr  = isProblem ? (e.attributes.state || "").replace(/_/g, " ") : "OK";
 
@@ -127,7 +131,7 @@ class HaSentinelCard extends HTMLElement {
           <ha-icon icon="${icon}" style="color:${color}"></ha-icon>
           <div class="info">
             <span class="name">${name}</span>
-            ${reason ? `<span class="secondary">${reason}</span>` : ""}
+            <span class="secondary">${reason || domain}</span>
           </div>
           <span class="value" style="color:${isProblem ? color : "var(--secondary-text-color)"}">
             ${stateStr}
