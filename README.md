@@ -1,8 +1,12 @@
-# HA Sentinel Card
+# Sentinel Card
 
-Lovelace card for [HA Sentinel](https://github.com/GuiPoM/ha-sentinel) — shows the health status of your Home Assistant integrations at a glance.
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
+[![GitHub release](https://img.shields.io/github/release/GuiPoM/lovelace-ha-sentinel.svg)](https://github.com/GuiPoM/lovelace-ha-sentinel/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
-> **Requires:** [HA Sentinel integration](https://github.com/GuiPoM/ha-sentinel) installed and configured.
+**Lovelace card for [Sentinel](https://github.com/GuiPoM/ha-sentinel) — visual health dashboard for your Home Assistant integrations.**
+
+> **Requires:** [Sentinel integration](https://github.com/GuiPoM/ha-sentinel) installed and configured.
 
 ---
 
@@ -11,8 +15,8 @@ Lovelace card for [HA Sentinel](https://github.com/GuiPoM/ha-sentinel) — shows
 ### Via HACS (recommended)
 
 1. In HACS, go to **Frontend** → **Custom repositories**
-2. Add `https://github.com/GuiPoM/lovelace-ha-sentinel` as a **Dashboard** type
-3. Search for "HA Sentinel Card" and install
+2. Add `https://github.com/GuiPoM/lovelace-ha-sentinel` — type **Dashboard**
+3. Search for **Sentinel Card** and install
 4. Refresh your browser
 
 ### Manual
@@ -38,7 +42,7 @@ filter_provider: integrations  # optional: filter by provider
 
 ---
 
-## Card options
+## Options
 
 | Option | Type | Default | Description |
 |---|---|---|---|
@@ -52,9 +56,9 @@ filter_provider: integrations  # optional: filter by provider
 
 - Color-coded status per integration (green / orange / red)
 - Problems sorted to the top
-- Shows time since last state change
+- Time since last state change
 - Failure count badge
-- Inline reload button for broken integrations (calls `ha_sentinel.reload`)
+- Inline reload button for broken integrations
 
 ---
 
