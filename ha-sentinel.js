@@ -1,36 +1,49 @@
 /**
  * Sentinel Card
  * Lovelace card for the Sentinel integration.
- * Uses hui-generic-entity-row for pixel-perfect native HA rendering.
  *
  * Usage:
  *   type: custom:ha-sentinel-card
- *   title: "Sentinel"        # optional — omit to hide header entirely
+ *   title: "Sentinel"        # optional — omit to hide header
  *   show_ok: true            # show healthy items (default: true)
  *   max_items: 10            # optional: limit number of rows shown
  *
  * Requires: https://github.com/GuiPoM/ha-sentinel
  */
 
-const CARD_VERSION = "0.3.1";
+const CARD_VERSION = "0.4.0";
+
+// State color map matching HA's --state-binary_sensor-problem-*-color
+const COLOR = {
+  error:   "var(--error-color, #f44336)",
+  warning: "var(--warning-color, #ff9800)",
+  ok:      "var(--success-color, #4caf50)",
+  off:     "var(--disabled-color, #bdbdbd)",
+};
+
+const ICON = {
+  error:   "mdi:alert-circle",
+  warning: "mdi:alert",
+  ok:      "mdi:check-circle",
+};
 
 class HaSentinelCard extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
-    this._updateRows();
+    this._render();
   }
 
   setConfig(config) {
     this._config = config;
-    if (this._hass) this._updateRows();
+    if (this._hass) this._render();
   }
 
   getCardSize() {
-    return Math.min(this._config?.max_items || 5, 10) + 2;
+    return (this._config?.max_items || 5) + 2;
   }
 
   connectedCallback() {
-    if (!this._card) this._build();
+    if (!this._built) this._render();
   }
 
   _getSentinelEntities() {
@@ -44,170 +57,167 @@ class HaSentinelCard extends HTMLElement {
 
   _findProblemsEntity() {
     if (!this._hass) return null;
-    // Find sensor.sentinel_problems or similar
     return Object.values(this._hass.states).find(
-      (s) => s.entity_id.startsWith("sensor.") &&
-             s.entity_id.includes("sentinel") &&
-             s.entity_id.includes("problem")
+      (s) =>
+        s.entity_id.startsWith("sensor.") &&
+        s.entity_id.includes("sentinel") &&
+        s.entity_id.includes("problem")
     ) || null;
   }
 
-  _build() {
-    this._card = document.createElement("ha-card");
+  _render() {
+    if (!this._config) return;
 
-    this._header = document.createElement("div");
-    this._header.className = "card-header";
-    this._card.appendChild(this._header);
+    const showOk   = this._config.show_ok !== false;
+    const maxItems = this._config.max_items || null;
+    const title    = this._config.title ?? null;
 
-    // Summary row wrapper
-    this._summaryWrapper = document.createElement("div");
-    this._summaryRow = document.createElement("hui-generic-entity-row");
-    this._summaryWrapper.appendChild(this._summaryRow);
-    this._card.appendChild(this._summaryWrapper);
-
-    // Divider after summary
-    this._divider = document.createElement("div");
-    this._divider.className = "sentinel-divider";
-    this._card.appendChild(this._divider);
-
-    this._list = document.createElement("div");
-    this._list.id = "states";
-    this._list.className = "card-content";
-    this._card.appendChild(this._list);
-
-    this._footer = document.createElement("div");
-    this._footer.className = "sentinel-footer";
-    this._card.appendChild(this._footer);
-
-    const style = document.createElement("style");
-    style.textContent = `
-      .card-header {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 12px 16px 0;
-        font-size: var(--paper-font-subhead_-_font-size, 0.875rem);
-        font-weight: 500;
-        color: var(--secondary-text-color);
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        line-height: 2.5em;
-      }
-      .card-header ha-icon {
-        --mdc-icon-size: 18px;
-        color: var(--secondary-text-color);
-      }
-      .header-title { flex: 1; }
-      .card-header.hidden { display: none; }
-      .sentinel-divider {
-        border-top: 1px solid var(--divider-color, rgba(0,0,0,0.12));
-      }
-      .sentinel-footer {
-        padding: 4px 16px 8px;
-        font-size: 0.75em;
-        color: var(--secondary-text-color);
-        text-align: right;
-        min-height: 0;
-      }
-    `;
-    this._card.appendChild(style);
-    this.appendChild(this._card);
-  }
-
-  _updateRows() {
-    if (!this._card) this._build();
-
-    const title = this._config?.title ?? null; // null = no header
-    const showOk = this._config?.show_ok !== false;
-    const maxItems = this._config?.max_items || null;
-
-    // Header — only show if title is explicitly set
-    if (title !== null) {
-      this._header.classList.remove("hidden");
-      this._header.innerHTML = `
-        <ha-icon icon="mdi:shield-check"></ha-icon>
-        <span class="header-title">${title}</span>
-      `;
-    } else {
-      this._header.classList.add("hidden");
-    }
-
-    // Summary row — sensor.sentinel_problems
-    const problemsEntity = this._findProblemsEntity();
-    if (problemsEntity) {
-      this._summaryWrapper.style.display = "";
-      this._divider.style.display = "";
-      this._summaryRow.hass = this._hass;
-      this._summaryRow.config = {
-        entity: problemsEntity.entity_id,
-        name: "Problèmes détectés",
-      };
-    } else {
-      this._summaryWrapper.style.display = "none";
-      this._divider.style.display = "none";
-    }
-
-    // Entity rows
+    // --- sort entities ---
+    const severityRank = { error: 0, warning: 1, ok: 2 };
     let entities = this._getSentinelEntities();
+
     if (!showOk) entities = entities.filter((e) => e.state === "on");
 
-    const severityOrder = { error: 0, warning: 1, ok: 2 };
     entities.sort((a, b) => {
-      const sa = a.state === "on" ? (severityOrder[a.attributes.severity] ?? 1) : 2;
-      const sb = b.state === "on" ? (severityOrder[b.attributes.severity] ?? 1) : 2;
-      if (sa !== sb) return sa - sb;
-      const nameA = (a.attributes.friendly_name || a.entity_id).replace(/^Sentinel\s+/i, "");
-      const nameB = (b.attributes.friendly_name || b.entity_id).replace(/^Sentinel\s+/i, "");
-      return nameA.localeCompare(nameB);
+      const ra = a.state === "on" ? (severityRank[a.attributes.severity] ?? 1) : 2;
+      const rb = b.state === "on" ? (severityRank[b.attributes.severity] ?? 1) : 2;
+      if (ra !== rb) return ra - rb;
+      const na = (a.attributes.friendly_name || a.entity_id).replace(/^Sentinel\s+/i, "");
+      const nb = (b.attributes.friendly_name || b.entity_id).replace(/^Sentinel\s+/i, "");
+      return na.localeCompare(nb);
     });
 
-    const totalCount = entities.length;
-
-    let hiddenCount = 0;
+    const total = entities.length;
+    let hidden = 0;
     if (maxItems && entities.length > maxItems) {
-      hiddenCount = entities.length - maxItems;
+      hidden   = entities.length - maxItems;
       entities = entities.slice(0, maxItems);
     }
 
-    const existing = Array.from(this._list.children);
+    // --- problems sensor ---
+    const problemsEntity = this._findProblemsEntity();
+    const problemCount   = entities.filter((e) => e.state === "on").length;
 
-    entities.forEach((entity, i) => {
-      let wrapper = existing[i];
-      let row;
+    // --- build rows HTML ---
+    const problemRow = problemsEntity ? `
+      <div class="row">
+        <ha-icon icon="${problemCount > 0 ? "mdi:shield-alert" : "mdi:shield-check"}"
+          style="color:${problemCount > 0 ? COLOR.error : COLOR.ok}"></ha-icon>
+        <div class="info">
+          <span class="name">Problèmes détectés</span>
+        </div>
+        <span class="value" style="color:${problemCount > 0 ? COLOR.error : COLOR.ok}">
+          ${problemsEntity.state}
+        </span>
+      </div>
+      <div class="divider"></div>
+    ` : "";
 
-      if (!wrapper || wrapper.tagName.toLowerCase() !== "div") {
-        wrapper = document.createElement("div");
-        row = document.createElement("hui-generic-entity-row");
-        wrapper.appendChild(row);
-        if (existing[i]) {
-          this._list.replaceChild(wrapper, existing[i]);
-        } else {
-          this._list.appendChild(wrapper);
-        }
-      } else {
-        row = wrapper.querySelector("hui-generic-entity-row");
-        if (!row) {
-          row = document.createElement("hui-generic-entity-row");
-          wrapper.appendChild(row);
-        }
-      }
+    const rows = entities.map((e) => {
+      const isProblem = e.state === "on";
+      const severity  = isProblem ? (e.attributes.severity || "warning") : "ok";
+      const color     = isProblem ? COLOR[severity] || COLOR.warning : COLOR.off;
+      const icon      = isProblem ? ICON[severity]  || ICON.warning  : ICON.ok;
+      const name      = (e.attributes.friendly_name || e.entity_id).replace(/^Sentinel\s+/i, "");
+      const reason    = e.attributes.reason || "";
+      const stateStr  = isProblem ? (e.attributes.state || "").replace(/_/g, " ") : "OK";
 
-      row.hass = this._hass;
-      row.config = {
-        entity: entity.entity_id,
-        name: (entity.attributes.friendly_name || entity.entity_id).replace(/^Sentinel\s+/i, ""),
-        secondary_info: entity.attributes.reason || null,
-      };
-    });
+      return `
+        <div class="row">
+          <ha-icon icon="${icon}" style="color:${color}"></ha-icon>
+          <div class="info">
+            <span class="name">${name}</span>
+            ${reason ? `<span class="secondary">${reason}</span>` : ""}
+          </div>
+          <span class="value" style="color:${isProblem ? color : "var(--secondary-text-color)"}">
+            ${stateStr}
+          </span>
+        </div>
+      `;
+    }).join("");
 
-    // Remove extra wrappers
-    while (this._list.children.length > entities.length) {
-      this._list.removeChild(this._list.lastChild);
-    }
-
-    this._footer.textContent = hiddenCount > 0
-      ? `+ ${hiddenCount} autre${hiddenCount > 1 ? "s" : ""} sur ${totalCount}`
+    const footer = hidden > 0
+      ? `<div class="footer">+ ${hidden} autre${hidden > 1 ? "s" : ""} sur ${total}</div>`
       : "";
+
+    const header = title !== null ? `
+      <div class="card-header">
+        <ha-icon icon="mdi:shield-check" class="header-icon"></ha-icon>
+        <span>${title}</span>
+      </div>
+    ` : "";
+
+    this.innerHTML = `
+      <ha-card>
+        ${header}
+        <div class="card-content">
+          ${problemRow}
+          ${rows || '<div class="empty">Aucune intégration à afficher.</div>'}
+        </div>
+        ${footer}
+      </ha-card>
+      <style>
+        ha-card { overflow: hidden; }
+        .card-header {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 12px 16px 8px;
+          font-size: 0.875rem;
+          font-weight: 500;
+          color: var(--secondary-text-color);
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+        .card-header ha-icon { --mdc-icon-size: 18px; }
+        .card-content { padding: 8px 0; }
+        .row {
+          display: flex;
+          align-items: center;
+          min-height: 52px;
+          padding: 4px 16px;
+          box-sizing: border-box;
+          gap: 16px;
+        }
+        ha-icon { --mdc-icon-size: 24px; flex-shrink: 0; }
+        .info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+        .name {
+          font-size: 0.9em;
+          color: var(--primary-text-color);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .secondary {
+          font-size: 0.78em;
+          color: var(--secondary-text-color);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .value {
+          font-size: 0.85em;
+          font-weight: 500;
+          flex-shrink: 0;
+        }
+        .divider {
+          border-top: 1px solid var(--divider-color, rgba(0,0,0,0.12));
+          margin: 0;
+        }
+        .footer {
+          padding: 4px 16px 8px;
+          font-size: 0.75em;
+          color: var(--secondary-text-color);
+          text-align: right;
+        }
+        .empty {
+          padding: 8px 16px;
+          color: var(--secondary-text-color);
+          font-size: 0.9em;
+        }
+      </style>
+    `;
+    this._built = true;
   }
 }
 
