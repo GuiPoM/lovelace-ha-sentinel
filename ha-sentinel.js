@@ -97,7 +97,6 @@ class HaSentinelCard extends HTMLElement {
       .card-header.hidden { display: none; }
       .sentinel-divider {
         border-top: 1px solid var(--divider-color, rgba(0,0,0,0.12));
-        margin: 0 16px;
       }
       .sentinel-footer {
         padding: 4px 16px 8px;
