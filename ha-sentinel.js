@@ -1,51 +1,18 @@
 /**
- * HA Sentinel Card
- * A Lovelace card showing the health status of all monitored integrations.
+ * Sentinel Card
+ * Lovelace card for the Sentinel integration — native HA look and feel.
  *
  * Usage:
  *   type: custom:ha-sentinel-card
- *   title: "Integration Status"        # optional
- *   show_ok: true                      # show healthy items (default: true)
- *   filter_provider: "integrations"    # optional: filter by provider
+ *   title: "Sentinel"        # optional
+ *   show_ok: true            # show healthy items (default: true)
  *
- * Requires: https://github.com/GuiPoM/ha-sentinel (integration)
+ * Requires: https://github.com/GuiPoM/ha-sentinel
  */
 
-const CARD_VERSION = "0.1.3";
-
-const STATE_COLORS = {
-  ok: "var(--success-color, #4CAF50)",
-  problem: "var(--error-color, #f44336)",
-  retry: "var(--warning-color, #FF9800)",
-  unknown: "var(--disabled-color, #9E9E9E)",
-};
-
-function getStateColor(state) {
-  if (state === "loaded") return STATE_COLORS.ok;
-  if (state === "setup_retry") return STATE_COLORS.retry;
-  if (["setup_error", "migration_error", "failed_unload"].includes(state))
-    return STATE_COLORS.problem;
-  return STATE_COLORS.unknown;
-}
-
-function formatSince(isoString) {
-  if (!isoString) return "";
-  const d = new Date(isoString);
-  const now = new Date();
-  const diffMs = now - d;
-  const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  return `${Math.floor(diffHours / 24)}d ago`;
-}
+const CARD_VERSION = "0.2.0";
 
 class HaSentinelCard extends HTMLElement {
-  static get properties() {
-    return { hass: {}, config: {} };
-  }
-
   set hass(hass) {
     this._hass = hass;
     this._render();
@@ -57,10 +24,6 @@ class HaSentinelCard extends HTMLElement {
 
   getCardSize() {
     return 4;
-  }
-
-  getGridOptions() {
-    return { rows: 4, columns: 12, min_rows: 2 };
   }
 
   _getSentinelEntities() {
@@ -77,21 +40,13 @@ class HaSentinelCard extends HTMLElement {
 
     const title = this._config.title || "Sentinel";
     const showOk = this._config.show_ok !== false;
-    const filterProvider = this._config.filter_provider || null;
 
     let entities = this._getSentinelEntities();
-
-    if (filterProvider) {
-      entities = entities.filter(
-        (e) => e.attributes.provider === filterProvider
-      );
-    }
 
     if (!showOk) {
       entities = entities.filter((e) => e.state === "on");
     }
 
-    // Sort: problems first, then by name
     entities.sort((a, b) => {
       if (a.state === "on" && b.state !== "on") return -1;
       if (a.state !== "on" && b.state === "on") return 1;
@@ -101,170 +56,121 @@ class HaSentinelCard extends HTMLElement {
     });
 
     const problemCount = entities.filter((e) => e.state === "on").length;
-    const totalCount = entities.length;
 
-    const rows = entities
-      .map((entity) => {
-        const isProblem = entity.state === "on";
-        const state = entity.attributes.state || "unknown";
-        const color = getStateColor(state);
-        const since = formatSince(entity.attributes.since);
-        const reason = entity.attributes.reason || "";
-        const failCount = entity.attributes.failure_count || 0;
-        const canReload = entity.attributes.can_reload === true;
-        const domain = entity.attributes.domain || "";
-        const rawName =
-          entity.attributes.friendly_name ||
-          entity.entity_id.replace("binary_sensor.ha_sentinel_", "");
-        // Strip "Sentinel " prefix added by HA device name
-        const name = rawName.replace(/^Sentinel\s+/i, "");
+    const rows = entities.map((entity) => {
+      const isProblem = entity.state === "on";
+      const severity = entity.attributes.severity || "ok";
+      const state = entity.attributes.state || "unknown";
+      const reason = entity.attributes.reason || "";
+      const name = (entity.attributes.friendly_name || entity.entity_id)
+        .replace(/^Sentinel\s+/i, "");
 
-        return `
-          <div class="sentinel-row ${isProblem ? "problem" : "ok"}">
-            <div class="sentinel-indicator" style="background:${color}"></div>
-            <div class="sentinel-info">
-              <div class="sentinel-name">${name}</div>
-              <div class="sentinel-meta">
-                <span class="sentinel-domain">${domain}</span>
-                <span class="sentinel-state" style="color:${color}">${state.replace(/_/g, " ")}</span>
-                ${since ? `<span class="sentinel-since">${since}</span>` : ""}
-                ${failCount > 0 ? `<span class="sentinel-failures" title="Total failures">${failCount}x</span>` : ""}
-              </div>
-              ${reason ? `<div class="sentinel-reason">${reason}</div>` : ""}
-            </div>
-            ${
-              canReload && isProblem
-                ? `<button class="sentinel-reload" data-entry-id="${entity.attributes.entry_id}" title="Reload integration">
-                    &#x21BB;
-                  </button>`
-                : '<div class="sentinel-reload-placeholder"></div>'
-            }
+      const icon = isProblem
+        ? severity === "error" ? "mdi:alert-circle" : "mdi:alert"
+        : "mdi:check-circle";
+
+      const iconColor = isProblem
+        ? severity === "error" ? "var(--error-color)" : "var(--warning-color)"
+        : "var(--success-color)";
+
+      const stateLabel = isProblem
+        ? state.replace(/_/g, " ")
+        : "OK";
+
+      return `
+        <div class="entity-row">
+          <ha-icon icon="${icon}" style="color:${iconColor};--mdc-icon-size:20px;flex-shrink:0"></ha-icon>
+          <div class="entity-info">
+            <span class="entity-name">${name}</span>
+            ${reason ? `<span class="entity-secondary">${reason}</span>` : ""}
           </div>
-        `;
-      })
-      .join("");
-
-    const headerColor =
-      problemCount > 0 ? STATE_COLORS.problem : STATE_COLORS.ok;
+          <span class="entity-state" style="color:${iconColor}">${stateLabel}</span>
+        </div>
+      `;
+    }).join("");
 
     this.innerHTML = `
       <ha-card>
-        <div class="sentinel-card">
-          <div class="sentinel-header">
-            <span class="sentinel-title">${title}</span>
-            <span class="sentinel-badge" style="background:${headerColor}">
-              ${problemCount > 0 ? `${problemCount} problem${problemCount > 1 ? "s" : ""}` : "All OK"}
-            </span>
-          </div>
-          <div class="sentinel-subtitle">${totalCount} monitored</div>
-          <div class="sentinel-list">
-            ${rows.length > 0 ? rows : '<div class="sentinel-empty">No integrations to display.</div>'}
-          </div>
+        <div class="card-header">
+          <div class="name">${title}</div>
+          ${problemCount > 0
+            ? `<div class="problem-badge">${problemCount} problème${problemCount > 1 ? "s" : ""}</div>`
+            : `<ha-icon icon="mdi:shield-check" style="color:var(--success-color);--mdc-icon-size:20px"></ha-icon>`
+          }
+        </div>
+        <div class="card-content">
+          ${rows || `<div class="empty">Aucune intégration à afficher.</div>`}
         </div>
       </ha-card>
       <style>
-        .sentinel-card { padding: 16px; }
-        .sentinel-header {
+        ha-card {
+          --ha-card-border-radius: var(--ha-card-border-radius, 12px);
+        }
+        .card-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-bottom: 4px;
+          padding: 16px 16px 0;
+          font-size: 1.1em;
+          font-weight: var(--ha-card-header-font-weight, 500);
+          color: var(--ha-card-header-color, var(--primary-text-color));
         }
-        .sentinel-title { font-size: 1.1em; font-weight: 600; }
-        .sentinel-badge {
-          padding: 2px 10px;
-          border-radius: 12px;
+        .problem-badge {
+          background: var(--error-color);
           color: white;
-          font-size: 0.8em;
+          font-size: 0.75em;
           font-weight: 600;
+          padding: 2px 8px;
+          border-radius: 10px;
         }
-        .sentinel-subtitle {
-          font-size: 0.8em;
-          color: var(--secondary-text-color);
-          margin-bottom: 12px;
+        .card-content {
+          padding: 8px 0 8px;
         }
-        .sentinel-row {
+        .entity-row {
           display: flex;
           align-items: center;
-          gap: 10px;
-          padding: 8px 4px;
-          border-bottom: 1px solid var(--divider-color, #e0e0e0);
+          gap: 12px;
+          padding: 8px 16px;
+          min-height: 44px;
+          border-bottom: 1px solid var(--divider-color, rgba(0,0,0,0.12));
+          box-sizing: border-box;
         }
-        .sentinel-row:last-child { border-bottom: none; }
-        .sentinel-indicator {
-          width: 10px;
-          height: 10px;
-          border-radius: 50%;
-          flex-shrink: 0;
+        .entity-row:last-child {
+          border-bottom: none;
         }
-        .sentinel-info { flex: 1; min-width: 0; }
-        .sentinel-name {
+        .entity-info {
+          flex: 1;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+        }
+        .entity-name {
+          font-size: 0.9em;
+          color: var(--primary-text-color);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .entity-secondary {
+          font-size: 0.78em;
+          color: var(--secondary-text-color);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          margin-top: 1px;
+        }
+        .entity-state {
+          font-size: 0.85em;
           font-weight: 500;
-          font-size: 0.95em;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .sentinel-meta {
-          display: flex;
-          gap: 8px;
-          font-size: 0.78em;
-          color: var(--secondary-text-color);
-          flex-wrap: wrap;
-          margin-top: 2px;
-        }
-        .sentinel-domain { font-style: italic; }
-        .sentinel-state { font-weight: 500; }
-        .sentinel-since { opacity: 0.8; }
-        .sentinel-failures {
-          background: var(--warning-color, #FF9800);
-          color: white;
-          padding: 0 5px;
-          border-radius: 8px;
-          font-size: 0.9em;
-        }
-        .sentinel-reason {
-          font-size: 0.78em;
-          color: var(--error-color, #f44336);
-          margin-top: 2px;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .sentinel-reload {
-          background: none;
-          border: 1px solid var(--primary-color);
-          border-radius: 50%;
-          width: 28px;
-          height: 28px;
-          cursor: pointer;
-          color: var(--primary-color);
-          font-size: 1em;
-          display: flex;
-          align-items: center;
-          justify-content: center;
           flex-shrink: 0;
         }
-        .sentinel-reload:hover { background: var(--primary-color); color: white; }
-        .sentinel-reload-placeholder { width: 28px; flex-shrink: 0; }
-        .sentinel-empty {
+        .empty {
+          padding: 12px 16px;
           color: var(--secondary-text-color);
           font-size: 0.9em;
-          padding: 8px 0;
         }
       </style>
     `;
-
-    // Attach reload button handlers
-    this.querySelectorAll(".sentinel-reload").forEach((btn) => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const entryId = btn.dataset.entryId;
-        if (entryId && this._hass) {
-          this._hass.callService("ha_sentinel", "reload", { item_id: entryId });
-        }
-      });
-    });
   }
 
   connectedCallback() {
@@ -278,13 +184,13 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "ha-sentinel-card",
   name: "Sentinel Card",
-  description: "Shows the health status of your Home Assistant integrations. Requires the Sentinel integration.",
+  description: "Health status of your integrations. Requires the Sentinel integration.",
   preview: false,
   documentationURL: "https://github.com/GuiPoM/lovelace-ha-sentinel",
 });
 
 console.info(
-  `%c HA-SENTINEL-CARD %c v${CARD_VERSION} `,
-  "color: white; background: #e91e63; font-weight: 700;",
-  "color: #e91e63; background: white; font-weight: 700;"
+  `%c SENTINEL-CARD %c v${CARD_VERSION} `,
+  "color:white;background:#1976D2;font-weight:700;",
+  "color:#1976D2;background:white;font-weight:700;"
 );
