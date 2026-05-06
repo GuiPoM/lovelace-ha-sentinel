@@ -6,11 +6,12 @@
  *   type: custom:ha-sentinel-card
  *   title: "Sentinel"        # optional
  *   show_ok: true            # show healthy items (default: true)
+ *   max_items: 10            # optional: limit number of rows shown
  *
  * Requires: https://github.com/GuiPoM/ha-sentinel
  */
 
-const CARD_VERSION = "0.2.1";
+const CARD_VERSION = "0.2.2";
 
 class HaSentinelCard extends HTMLElement {
   set hass(hass) {
@@ -48,9 +49,8 @@ class HaSentinelCard extends HTMLElement {
       entities = entities.filter((e) => e.state === "on");
     }
 
-    // Sort: errors first, then warnings, then OK — alphabetical within each group
+    const severityOrder = { error: 0, warning: 1, ok: 2 };
     entities.sort((a, b) => {
-      const severityOrder = { error: 0, warning: 1, ok: 2 };
       const sa = a.state === "on" ? (severityOrder[a.attributes.severity] ?? 1) : 2;
       const sb = b.state === "on" ? (severityOrder[b.attributes.severity] ?? 1) : 2;
       if (sa !== sb) return sa - sb;
@@ -62,7 +62,6 @@ class HaSentinelCard extends HTMLElement {
     const totalCount = entities.length;
     const problemCount = entities.filter((e) => e.state === "on").length;
 
-    // Apply max_items limit — always keep problems, trim OK from the end
     let hiddenCount = 0;
     if (maxItems && entities.length > maxItems) {
       hiddenCount = entities.length - maxItems;
@@ -85,18 +84,19 @@ class HaSentinelCard extends HTMLElement {
         ? severity === "error" ? "var(--error-color)" : "var(--warning-color)"
         : "var(--success-color)";
 
-      const stateLabel = isProblem
-        ? state.replace(/_/g, " ")
-        : "OK";
+      const stateLabel = isProblem ? state.replace(/_/g, " ") : "OK";
+      const stateColor = isProblem
+        ? severity === "error" ? "var(--error-color)" : "var(--warning-color)"
+        : "var(--secondary-text-color)";
 
       return `
         <div class="entity-row">
-          <ha-icon icon="${icon}" style="color:${iconColor};--mdc-icon-size:20px;flex-shrink:0"></ha-icon>
+          <ha-icon icon="${icon}" style="color:${iconColor}"></ha-icon>
           <div class="entity-info">
             <span class="entity-name">${name}</span>
             ${reason ? `<span class="entity-secondary">${reason}</span>` : ""}
           </div>
-          <span class="entity-state" style="color:${iconColor}">${stateLabel}</span>
+          <span class="entity-state" style="color:${stateColor}">${stateLabel}</span>
         </div>
       `;
     }).join("");
@@ -104,52 +104,62 @@ class HaSentinelCard extends HTMLElement {
     this.innerHTML = `
       <ha-card>
         <div class="card-header">
-          <div class="name">${title}</div>
+          <ha-icon icon="mdi:shield-check" class="header-icon"></ha-icon>
+          <span class="header-title">${title}</span>
           ${problemCount > 0
-            ? `<div class="problem-badge">${problemCount} problème${problemCount > 1 ? "s" : ""}</div>`
-            : `<ha-icon icon="mdi:shield-check" style="color:var(--success-color);--mdc-icon-size:20px"></ha-icon>`
+            ? `<span class="problem-badge">${problemCount}</span>`
+            : ""
           }
         </div>
         <div class="card-content">
           ${rows || `<div class="empty">Aucune intégration à afficher.</div>`}
-          ${hiddenCount > 0 ? `<div class="hidden-count">+ ${hiddenCount} autre${hiddenCount > 1 ? "s" : ""} sur ${totalCount}</div>` : ""}
+          ${hiddenCount > 0
+            ? `<div class="hidden-count">+ ${hiddenCount} autre${hiddenCount > 1 ? "s" : ""} sur ${totalCount}</div>`
+            : ""}
         </div>
       </ha-card>
       <style>
-        ha-card {
-          --ha-card-border-radius: var(--ha-card-border-radius, 12px);
-        }
         .card-header {
           display: flex;
-          justify-content: space-between;
           align-items: center;
-          padding: 16px 16px 0;
-          font-size: 1.1em;
-          font-weight: var(--ha-card-header-font-weight, 500);
-          color: var(--ha-card-header-color, var(--primary-text-color));
+          gap: 8px;
+          padding: 12px 16px 8px;
+          font-size: 0.9em;
+          font-weight: 500;
+          color: var(--secondary-text-color);
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+        .header-icon {
+          --mdc-icon-size: 18px;
+          color: var(--secondary-text-color);
+        }
+        .header-title {
+          flex: 1;
         }
         .problem-badge {
           background: var(--error-color);
           color: white;
           font-size: 0.75em;
-          font-weight: 600;
-          padding: 2px 8px;
-          border-radius: 10px;
+          font-weight: 700;
+          padding: 1px 6px;
+          border-radius: 8px;
+          line-height: 1.6;
         }
         .card-content {
-          padding: 8px 0 8px;
+          padding: 0 0 4px;
         }
         .entity-row {
           display: flex;
           align-items: center;
           gap: 12px;
-          padding: 8px 16px;
-          min-height: 44px;
-          border-bottom: 1px solid var(--divider-color, rgba(0,0,0,0.12));
+          padding: 10px 16px;
+          border-top: 1px solid var(--divider-color, rgba(0,0,0,0.08));
           box-sizing: border-box;
         }
-        .entity-row:last-child {
-          border-bottom: none;
+        ha-icon {
+          --mdc-icon-size: 20px;
+          flex-shrink: 0;
         }
         .entity-info {
           flex: 1;
@@ -158,7 +168,7 @@ class HaSentinelCard extends HTMLElement {
           flex-direction: column;
         }
         .entity-name {
-          font-size: 0.9em;
+          font-size: 0.95em;
           color: var(--primary-text-color);
           white-space: nowrap;
           overflow: hidden;
@@ -181,9 +191,10 @@ class HaSentinelCard extends HTMLElement {
           padding: 12px 16px;
           color: var(--secondary-text-color);
           font-size: 0.9em;
+          border-top: 1px solid var(--divider-color, rgba(0,0,0,0.08));
         }
         .hidden-count {
-          padding: 6px 16px 10px;
+          padding: 4px 16px 8px;
           color: var(--secondary-text-color);
           font-size: 0.78em;
           text-align: right;
