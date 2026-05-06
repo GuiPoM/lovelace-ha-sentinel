@@ -11,7 +11,7 @@
  * Requires: https://github.com/GuiPoM/ha-sentinel (integration)
  */
 
-const CARD_VERSION = "0.1.2";
+const CARD_VERSION = "0.1.3";
 
 const STATE_COLORS = {
   ok: "var(--success-color, #4CAF50)",
