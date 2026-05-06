@@ -5,14 +5,14 @@
  *
  * Usage:
  *   type: custom:ha-sentinel-card
- *   title: "Sentinel"        # optional
+ *   title: "Sentinel"        # optional — omit to hide header entirely
  *   show_ok: true            # show healthy items (default: true)
  *   max_items: 10            # optional: limit number of rows shown
  *
  * Requires: https://github.com/GuiPoM/ha-sentinel
  */
 
-const CARD_VERSION = "0.3.0";
+const CARD_VERSION = "0.3.1";
 
 class HaSentinelCard extends HTMLElement {
   set hass(hass) {
@@ -26,7 +26,7 @@ class HaSentinelCard extends HTMLElement {
   }
 
   getCardSize() {
-    return Math.min(this._config?.max_items || 5, 10) + 1;
+    return Math.min(this._config?.max_items || 5, 10) + 2;
   }
 
   connectedCallback() {
@@ -42,13 +42,31 @@ class HaSentinelCard extends HTMLElement {
     );
   }
 
+  _findProblemsEntity() {
+    if (!this._hass) return null;
+    // Find sensor.sentinel_problems or similar
+    return Object.values(this._hass.states).find(
+      (s) => s.entity_id.startsWith("sensor.") &&
+             s.entity_id.includes("sentinel") &&
+             s.entity_id.includes("problem")
+    ) || null;
+  }
+
   _build() {
-    // Build the static card shell once
     this._card = document.createElement("ha-card");
 
     this._header = document.createElement("div");
     this._header.className = "card-header";
     this._card.appendChild(this._header);
+
+    // Problems summary row (native)
+    this._summaryRow = document.createElement("hui-generic-entity-row");
+    this._card.appendChild(this._summaryRow);
+
+    // Divider after summary
+    this._divider = document.createElement("div");
+    this._divider.className = "sentinel-divider";
+    this._card.appendChild(this._divider);
 
     this._list = document.createElement("div");
     this._card.appendChild(this._list);
@@ -63,33 +81,23 @@ class HaSentinelCard extends HTMLElement {
         display: flex;
         align-items: center;
         gap: 8px;
-        padding: 12px 16px 4px;
+        padding: 12px 16px 0;
         font-size: var(--paper-font-subhead_-_font-size, 0.875rem);
         font-weight: 500;
         color: var(--secondary-text-color);
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        line-height: 40px;
+        line-height: 2.5em;
       }
       .card-header ha-icon {
         --mdc-icon-size: 18px;
         color: var(--secondary-text-color);
       }
       .header-title { flex: 1; }
-      .problem-badge {
-        background: var(--error-color);
-        color: white;
-        font-size: 0.7em;
-        font-weight: 700;
-        min-width: 18px;
-        height: 18px;
-        line-height: 18px;
-        text-align: center;
-        padding: 0 5px;
-        border-radius: 9px;
-      }
-      hui-generic-entity-row {
-        padding: 0 16px;
+      .card-header.hidden { display: none; }
+      .sentinel-divider {
+        border-top: 1px solid var(--divider-color, rgba(0,0,0,0.12));
+        margin: 0 16px;
       }
       .sentinel-footer {
         padding: 4px 16px 8px;
@@ -106,14 +114,40 @@ class HaSentinelCard extends HTMLElement {
   _updateRows() {
     if (!this._card) this._build();
 
-    const title = this._config?.title || "Sentinel";
+    const title = this._config?.title ?? null; // null = no header
     const showOk = this._config?.show_ok !== false;
     const maxItems = this._config?.max_items || null;
 
+    // Header — only show if title is explicitly set
+    if (title !== null) {
+      this._header.classList.remove("hidden");
+      this._header.innerHTML = `
+        <ha-icon icon="mdi:shield-check"></ha-icon>
+        <span class="header-title">${title}</span>
+      `;
+    } else {
+      this._header.classList.add("hidden");
+    }
+
+    // Summary row — sensor.sentinel_problems
+    const problemsEntity = this._findProblemsEntity();
+    if (problemsEntity) {
+      this._summaryRow.style.display = "";
+      this._divider.style.display = "";
+      this._summaryRow.hass = this._hass;
+      this._summaryRow.config = {
+        entity: problemsEntity.entity_id,
+        name: "Problèmes détectés",
+      };
+    } else {
+      this._summaryRow.style.display = "none";
+      this._divider.style.display = "none";
+    }
+
+    // Entity rows
     let entities = this._getSentinelEntities();
     if (!showOk) entities = entities.filter((e) => e.state === "on");
 
-    // Sort: error → warning → ok, then alphabetical
     const severityOrder = { error: 0, warning: 1, ok: 2 };
     entities.sort((a, b) => {
       const sa = a.state === "on" ? (severityOrder[a.attributes.severity] ?? 1) : 2;
@@ -125,7 +159,6 @@ class HaSentinelCard extends HTMLElement {
     });
 
     const totalCount = entities.length;
-    const problemCount = entities.filter((e) => e.state === "on").length;
 
     let hiddenCount = 0;
     if (maxItems && entities.length > maxItems) {
@@ -133,14 +166,6 @@ class HaSentinelCard extends HTMLElement {
       entities = entities.slice(0, maxItems);
     }
 
-    // Header
-    this._header.innerHTML = `
-      <ha-icon icon="mdi:shield-check"></ha-icon>
-      <span class="header-title">${title}</span>
-      ${problemCount > 0 ? `<span class="problem-badge">${problemCount}</span>` : ""}
-    `;
-
-    // Rows — reuse existing hui-generic-entity-row elements when possible
     const existing = Array.from(this._list.children);
 
     entities.forEach((entity, i) => {
@@ -163,12 +188,10 @@ class HaSentinelCard extends HTMLElement {
       };
     });
 
-    // Remove extra rows
     while (this._list.children.length > entities.length) {
       this._list.removeChild(this._list.lastChild);
     }
 
-    // Footer
     this._footer.textContent = hiddenCount > 0
       ? `+ ${hiddenCount} autre${hiddenCount > 1 ? "s" : ""} sur ${totalCount}`
       : "";
