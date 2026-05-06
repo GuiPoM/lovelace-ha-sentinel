@@ -195,6 +195,7 @@ class HaSentinelCard extends HTMLElement {
       row.hass = this._hass;
       row.config = {
         entity: entity.entity_id,
+        name: (entity.attributes.friendly_name || entity.entity_id).replace(/^Sentinel\s+/i, ""),
         secondary_info: entity.attributes.reason || null,
       };
     });
