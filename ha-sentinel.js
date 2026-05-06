@@ -11,7 +11,7 @@
  * Requires: https://github.com/GuiPoM/ha-sentinel (integration)
  */
 
-const CARD_VERSION = "0.1.0";
+const CARD_VERSION = "0.1.2";
 
 const STATE_COLORS = {
   ok: "var(--success-color, #4CAF50)",
@@ -75,7 +75,7 @@ class HaSentinelCard extends HTMLElement {
   _render() {
     if (!this._hass || !this._config) return;
 
-    const title = this._config.title || "HA Sentinel";
+    const title = this._config.title || "Sentinel";
     const showOk = this._config.show_ok !== false;
     const filterProvider = this._config.filter_provider || null;
 
@@ -95,9 +95,9 @@ class HaSentinelCard extends HTMLElement {
     entities.sort((a, b) => {
       if (a.state === "on" && b.state !== "on") return -1;
       if (a.state !== "on" && b.state === "on") return 1;
-      return (a.attributes.friendly_name || a.entity_id).localeCompare(
-        b.attributes.friendly_name || b.entity_id
-      );
+      const nameA = (a.attributes.friendly_name || a.entity_id).replace(/^Sentinel\s+/i, "");
+      const nameB = (b.attributes.friendly_name || b.entity_id).replace(/^Sentinel\s+/i, "");
+      return nameA.localeCompare(nameB);
     });
 
     const problemCount = entities.filter((e) => e.state === "on").length;
@@ -113,9 +113,11 @@ class HaSentinelCard extends HTMLElement {
         const failCount = entity.attributes.failure_count || 0;
         const canReload = entity.attributes.can_reload === true;
         const domain = entity.attributes.domain || "";
-        const name =
+        const rawName =
           entity.attributes.friendly_name ||
           entity.entity_id.replace("binary_sensor.ha_sentinel_", "");
+        // Strip "Sentinel " prefix added by HA device name
+        const name = rawName.replace(/^Sentinel\s+/i, "");
 
         return `
           <div class="sentinel-row ${isProblem ? "problem" : "ok"}">
@@ -275,8 +277,8 @@ customElements.define("ha-sentinel-card", HaSentinelCard);
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: "ha-sentinel-card",
-  name: "HA Sentinel Card",
-  description: "Shows the health status of your Home Assistant integrations. Requires the HA Sentinel integration.",
+  name: "Sentinel Card",
+  description: "Shows the health status of your Home Assistant integrations. Requires the Sentinel integration.",
   preview: false,
   documentationURL: "https://github.com/GuiPoM/lovelace-ha-sentinel",
 });
