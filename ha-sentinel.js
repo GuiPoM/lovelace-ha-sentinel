@@ -10,7 +10,7 @@
  * Requires: https://github.com/GuiPoM/ha-sentinel
  */
 
-const CARD_VERSION = "0.2.0";
+const CARD_VERSION = "0.2.1";
 
 class HaSentinelCard extends HTMLElement {
   set hass(hass) {
@@ -40,6 +40,7 @@ class HaSentinelCard extends HTMLElement {
 
     const title = this._config.title || "Sentinel";
     const showOk = this._config.show_ok !== false;
+    const maxItems = this._config.max_items || null;
 
     let entities = this._getSentinelEntities();
 
@@ -47,15 +48,26 @@ class HaSentinelCard extends HTMLElement {
       entities = entities.filter((e) => e.state === "on");
     }
 
+    // Sort: errors first, then warnings, then OK — alphabetical within each group
     entities.sort((a, b) => {
-      if (a.state === "on" && b.state !== "on") return -1;
-      if (a.state !== "on" && b.state === "on") return 1;
+      const severityOrder = { error: 0, warning: 1, ok: 2 };
+      const sa = a.state === "on" ? (severityOrder[a.attributes.severity] ?? 1) : 2;
+      const sb = b.state === "on" ? (severityOrder[b.attributes.severity] ?? 1) : 2;
+      if (sa !== sb) return sa - sb;
       const nameA = (a.attributes.friendly_name || a.entity_id).replace(/^Sentinel\s+/i, "");
       const nameB = (b.attributes.friendly_name || b.entity_id).replace(/^Sentinel\s+/i, "");
       return nameA.localeCompare(nameB);
     });
 
+    const totalCount = entities.length;
     const problemCount = entities.filter((e) => e.state === "on").length;
+
+    // Apply max_items limit — always keep problems, trim OK from the end
+    let hiddenCount = 0;
+    if (maxItems && entities.length > maxItems) {
+      hiddenCount = entities.length - maxItems;
+      entities = entities.slice(0, maxItems);
+    }
 
     const rows = entities.map((entity) => {
       const isProblem = entity.state === "on";
@@ -100,6 +112,7 @@ class HaSentinelCard extends HTMLElement {
         </div>
         <div class="card-content">
           ${rows || `<div class="empty">Aucune intégration à afficher.</div>`}
+          ${hiddenCount > 0 ? `<div class="hidden-count">+ ${hiddenCount} autre${hiddenCount > 1 ? "s" : ""} sur ${totalCount}</div>` : ""}
         </div>
       </ha-card>
       <style>
@@ -168,6 +181,12 @@ class HaSentinelCard extends HTMLElement {
           padding: 12px 16px;
           color: var(--secondary-text-color);
           font-size: 0.9em;
+        }
+        .hidden-count {
+          padding: 6px 16px 10px;
+          color: var(--secondary-text-color);
+          font-size: 0.78em;
+          text-align: right;
         }
       </style>
     `;
