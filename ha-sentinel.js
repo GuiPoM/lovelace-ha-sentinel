@@ -203,18 +203,6 @@ class HaSentinelCard extends HTMLElement {
     while (this._list.children.length > entities.length) {
       this._list.removeChild(this._list.lastChild);
     }
-      }
-
-      row.hass = this._hass;
-      row.config = {
-        entity: entity.entity_id,
-        secondary_info: entity.attributes.reason || null,
-      };
-    });
-
-    while (this._list.children.length > entities.length) {
-      this._list.removeChild(this._list.lastChild);
-    }
 
     this._footer.textContent = hiddenCount > 0
       ? `+ ${hiddenCount} autre${hiddenCount > 1 ? "s" : ""} sur ${totalCount}`
