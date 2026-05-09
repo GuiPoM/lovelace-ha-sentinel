@@ -60,7 +60,7 @@ class HaSentinelCard extends HTMLElement {
   _getSentinelEntities() {
     if (!this._hass) return [];
     return Object.values(this._hass.states).filter(
-      (s) => s.entity_id.startsWith("binary_sensor.ha_sentinel_") &&
+      (s) => s.entity_id.startsWith("binary_sensor.sentinel_") &&
              s.attributes.provider === "integrations"
     );
   }
@@ -199,7 +199,7 @@ class HaSentinelDevicesCard extends HTMLElement {
   _getDeviceEntities() {
     if (!this._hass) return [];
     return Object.values(this._hass.states).filter(
-      (s) => s.entity_id.startsWith("binary_sensor.ha_sentinel_") &&
+      (s) => s.entity_id.startsWith("binary_sensor.sentinel_") &&
              s.attributes.provider === "devices"
     );
   }
