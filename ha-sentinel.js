@@ -75,7 +75,9 @@ class HaSentinelCard extends HTMLElement {
 
     // --- sort entities ---
     const severityRank = { error: 0, warning: 1, ok: 2 };
-    let entities = this._getSentinelEntities();
+    const allEntities  = this._getSentinelEntities();
+    const problemCount = allEntities.filter((e) => e.state === "on").length;
+    let entities = allEntities;
 
     if (!showOk) entities = entities.filter((e) => e.state === "on");
 
@@ -94,9 +96,6 @@ class HaSentinelCard extends HTMLElement {
       hidden   = entities.length - maxItems;
       entities = entities.slice(0, maxItems);
     }
-
-    // --- problems sensor ---
-    const problemCount   = entities.filter((e) => e.state === "on").length;
 
     // --- build rows HTML ---
     const problemRow = `
@@ -215,7 +214,9 @@ class HaSentinelDevicesCard extends HTMLElement {
     const groupBySource = this._config.group_by_source !== false;
 
     const severityRank = { error: 0, warning: 1, ok: 2 };
-    let entities = this._getDeviceEntities();
+    const allEntities = this._getDeviceEntities();
+    const problemCount = allEntities.filter((e) => e.state === "on").length;
+    let entities = allEntities;
 
     if (!showOk) entities = entities.filter((e) => e.state === "on");
 
@@ -237,8 +238,6 @@ class HaSentinelDevicesCard extends HTMLElement {
       hidden   = entities.length - maxItems;
       entities = entities.slice(0, maxItems);
     }
-
-    const problemCount = entities.filter((e) => e.state === "on").length;
 
     const summaryRow = `
       <div class="row">
