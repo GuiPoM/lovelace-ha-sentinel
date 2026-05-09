@@ -18,7 +18,11 @@
  * Requires: https://github.com/GuiPoM/ha-sentinel
  */
 
-const CARD_VERSION = "0.5.4";
+const CARD_VERSION = "0.5.5";
+
+// Provider identifiers — must match PROVIDER_* constants in sentinel/const.py
+const PROVIDER_INTEGRATIONS = "integrations";
+const PROVIDER_DEVICES = "devices";
 
 // State color map matching HA's --state-binary_sensor-problem-*-color
 const COLOR = {
@@ -60,8 +64,7 @@ class HaSentinelCard extends HTMLElement {
   _getSentinelEntities() {
     if (!this._hass) return [];
     return Object.values(this._hass.states).filter(
-      (s) => s.entity_id.startsWith("binary_sensor.sentinel_") &&
-             s.attributes.provider === "integrations"
+      (s) => s.attributes.provider === PROVIDER_INTEGRATIONS
     );
   }
 
@@ -199,8 +202,7 @@ class HaSentinelDevicesCard extends HTMLElement {
   _getDeviceEntities() {
     if (!this._hass) return [];
     return Object.values(this._hass.states).filter(
-      (s) => s.entity_id.startsWith("binary_sensor.sentinel_") &&
-             s.attributes.provider === "devices"
+      (s) => s.attributes.provider === PROVIDER_DEVICES
     );
   }
 
