@@ -66,16 +66,6 @@ class HaSentinelCard extends HTMLElement {
     );
   }
 
-  _findProblemsEntity() {
-    if (!this._hass) return null;
-    return Object.values(this._hass.states).find(
-      (s) =>
-        s.entity_id.startsWith("sensor.") &&
-        s.entity_id.includes("sentinel") &&
-        s.entity_id.includes("problem")
-    ) || null;
-  }
-
   _render() {
     if (!this._config) return;
 
@@ -106,11 +96,10 @@ class HaSentinelCard extends HTMLElement {
     }
 
     // --- problems sensor ---
-    const problemsEntity = this._findProblemsEntity();
     const problemCount   = entities.filter((e) => e.state === "on").length;
 
     // --- build rows HTML ---
-    const problemRow = problemsEntity ? `
+    const problemRow = `
       <div class="row">
         <ha-icon icon="${problemCount > 0 ? "mdi:shield-alert" : "mdi:shield-check"}"
           style="color:${problemCount > 0 ? COLOR.error : COLOR.ok}"></ha-icon>
@@ -118,11 +107,11 @@ class HaSentinelCard extends HTMLElement {
           <span class="name">Problèmes détectés</span>
         </div>
         <span class="value" style="color:${problemCount > 0 ? COLOR.error : COLOR.ok}">
-          ${problemsEntity.state}
+          ${problemCount}
         </span>
       </div>
       <div class="divider"></div>
-    ` : "";
+    `;
 
     const rows = entities.map((e) => {
       const isProblem = e.state === "on";
@@ -215,15 +204,6 @@ class HaSentinelDevicesCard extends HTMLElement {
       (s) => s.entity_id.startsWith("binary_sensor.ha_sentinel_") &&
              s.attributes.provider === "devices"
     );
-  }
-
-  _findProblemsEntity() {
-    if (!this._hass) return null;
-    return Object.values(this._hass.states).find(
-      (s) => s.entity_id.startsWith("sensor.") &&
-             s.entity_id.includes("sentinel") &&
-             s.entity_id.includes("problem")
-    ) || null;
   }
 
   _render() {
