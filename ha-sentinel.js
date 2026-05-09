@@ -18,7 +18,7 @@
  * Requires: https://github.com/GuiPoM/ha-sentinel
  */
 
-const CARD_VERSION = "0.5.5";
+const CARD_VERSION = "0.5.6";
 
 // Provider identifiers — must match PROVIDER_* constants in sentinel/const.py
 const PROVIDER_INTEGRATIONS = "integrations";
@@ -155,7 +155,7 @@ class HaSentinelCard extends HTMLElement {
         ${header}
         <div class="card-content">
           ${problemRow}
-          ${rows || '<div class="empty">Aucune intégration à afficher.</div>'}
+          ${rows || '<div class="empty">Aucune erreur détectée.</div>'}
         </div>
         ${footer}
       </ha-card>
@@ -242,7 +242,7 @@ class HaSentinelDevicesCard extends HTMLElement {
 
     const summaryRow = `
       <div class="row">
-        <ha-icon icon="${problemCount > 0 ? "mdi:network-off" : "mdi:check-network"}"
+        <ha-icon icon="${problemCount > 0 ? "mdi:devices" : "mdi:check-network"}"
           style="color:${problemCount > 0 ? COLOR.error : COLOR.ok}"></ha-icon>
         <div class="info">
           <span class="name">Appareils en erreur</span>
@@ -286,7 +286,7 @@ class HaSentinelDevicesCard extends HTMLElement {
         ${header}
         <div class="card-content">
           ${summaryRow}
-          ${rows || '<div class="empty">Aucun appareil problématique.</div>'}
+          ${rows || '<div class="empty">Aucune erreur détectée.</div>'}
         </div>
         ${footer}
       </ha-card>
