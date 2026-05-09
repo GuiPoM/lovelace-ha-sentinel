@@ -18,7 +18,7 @@
  * Requires: https://github.com/GuiPoM/ha-sentinel
  */
 
-const CARD_VERSION = "0.5.0";
+const CARD_VERSION = "0.5.4";
 
 // State color map matching HA's --state-binary_sensor-problem-*-color
 const COLOR = {
@@ -60,7 +60,7 @@ class HaSentinelCard extends HTMLElement {
   _getSentinelEntities() {
     if (!this._hass) return [];
     return Object.values(this._hass.states).filter(
-      (s) => s.entity_id.startsWith("binary_sensor.") &&
+      (s) => s.entity_id.startsWith("binary_sensor.ha_sentinel_") &&
              s.attributes.provider === "integrations"
     );
   }
@@ -68,8 +68,8 @@ class HaSentinelCard extends HTMLElement {
   _render() {
     if (!this._config) return;
 
-    const showOk   = this._config.show_ok !== false;
-    const maxItems = this._config.max_items || null;
+    const showOk   = this._config.show_ok === true;
+    const maxItems = this._config.max_items || 10;
     const title    = this._config.title ?? null;
 
     // --- sort entities ---
@@ -99,10 +99,10 @@ class HaSentinelCard extends HTMLElement {
     // --- build rows HTML ---
     const problemRow = `
       <div class="row">
-        <ha-icon icon="${problemCount > 0 ? "mdi:shield-alert" : "mdi:shield-check"}"
+        <ha-icon icon="${problemCount > 0 ? "mdi:puzzle-remove" : "mdi:puzzle-check"}"
           style="color:${problemCount > 0 ? COLOR.error : COLOR.ok}"></ha-icon>
         <div class="info">
-          <span class="name">Problèmes détectés</span>
+          <span class="name">Intégrations en erreur</span>
         </div>
         <span class="value" style="color:${problemCount > 0 ? COLOR.error : COLOR.ok}">
           ${problemCount}
@@ -199,7 +199,7 @@ class HaSentinelDevicesCard extends HTMLElement {
   _getDeviceEntities() {
     if (!this._hass) return [];
     return Object.values(this._hass.states).filter(
-      (s) => s.entity_id.startsWith("binary_sensor.") &&
+      (s) => s.entity_id.startsWith("binary_sensor.ha_sentinel_") &&
              s.attributes.provider === "devices"
     );
   }
@@ -208,7 +208,7 @@ class HaSentinelDevicesCard extends HTMLElement {
     if (!this._config) return;
 
     const showOk        = this._config.show_ok === true;
-    const maxItems      = this._config.max_items || null;
+    const maxItems      = this._config.max_items || 10;
     const title         = this._config.title ?? null;
     const groupBySource = this._config.group_by_source !== false;
 
@@ -240,10 +240,10 @@ class HaSentinelDevicesCard extends HTMLElement {
 
     const summaryRow = `
       <div class="row">
-        <ha-icon icon="${problemCount > 0 ? "mdi:devices" : "mdi:check-network"}"
+        <ha-icon icon="${problemCount > 0 ? "mdi:network-off" : "mdi:check-network"}"
           style="color:${problemCount > 0 ? COLOR.error : COLOR.ok}"></ha-icon>
         <div class="info">
-          <span class="name">Appareils problématiques</span>
+          <span class="name">Appareils en erreur</span>
         </div>
         <span class="value" style="color:${problemCount > 0 ? COLOR.error : COLOR.ok}">
           ${problemCount}
