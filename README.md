@@ -8,6 +8,8 @@
 
 > **Requires:** [Sentinel integration](https://github.com/GuiPoM/ha-sentinel) installed and configured.
 
+![Sentinel Card](icon.png)
+
 ---
 
 ## Cards
