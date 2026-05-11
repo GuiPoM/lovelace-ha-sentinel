@@ -18,11 +18,36 @@
  * Requires: https://github.com/GuiPoM/ha-sentinel
  */
 
-const CARD_VERSION = "0.5.6";
+const CARD_VERSION = "0.5.7";
 
 // Provider identifiers — must match PROVIDER_* constants in sentinel/const.py
 const PROVIDER_INTEGRATIONS = "integrations";
 const PROVIDER_DEVICES = "devices";
+
+// Localization — auto-detected from hass.language
+const LABELS = {
+  fr: {
+    integrations_error: "Intégrations en erreur",
+    devices_error:      "Appareils en erreur",
+    no_error:           "Aucune erreur détectée.",
+    unavailable:        "Indisponible",
+    ok:                 "OK",
+    unavailable_count:  (n) => `${n} entité${n > 1 ? "s" : ""} indisponible${n > 1 ? "s" : ""}`,
+  },
+  en: {
+    integrations_error: "Integrations with errors",
+    devices_error:      "Devices with errors",
+    no_error:           "No errors detected.",
+    unavailable:        "Unavailable",
+    ok:                 "OK",
+    unavailable_count:  (n) => `${n} unavailable entit${n > 1 ? "ies" : "y"}`,
+  },
+};
+
+function getLabels(hass) {
+  const lang = hass?.language?.split("-")[0] || "en";
+  return LABELS[lang] || LABELS["en"];
+}
 
 // State color map matching HA's --state-binary_sensor-problem-*-color
 const COLOR = {
@@ -71,6 +96,7 @@ class HaSentinelCard extends HTMLElement {
   _render() {
     if (!this._config) return;
 
+    const L        = getLabels(this._hass);
     const showOk   = this._config.show_ok === true;
     const maxItems = this._config.max_items || 10;
     const title    = this._config.title ?? null;
@@ -105,7 +131,7 @@ class HaSentinelCard extends HTMLElement {
         <ha-icon icon="${problemCount > 0 ? "mdi:puzzle-remove" : "mdi:puzzle-check"}"
           style="color:${problemCount > 0 ? COLOR.error : COLOR.ok}"></ha-icon>
         <div class="info">
-          <span class="name">Intégrations en erreur</span>
+          <span class="name">${L.integrations_error}</span>
         </div>
         <span class="value" style="color:${problemCount > 0 ? COLOR.error : COLOR.ok}">
           ${problemCount}
@@ -123,7 +149,7 @@ class HaSentinelCard extends HTMLElement {
       const domain    = e.attributes.domain || "";
       const name      = fullName.replace(/\s*\([^)]+\)\s*$/, "").trim() || fullName;
       const reason    = e.attributes.reason || "";
-      const stateStr  = isProblem ? (e.attributes.state || "").replace(/_/g, " ") : "OK";
+      const stateStr  = isProblem ? (e.attributes.state || "").replace(/_/g, " ") : L.ok;
 
       return `
         <div class="row">
@@ -155,7 +181,7 @@ class HaSentinelCard extends HTMLElement {
         ${header}
         <div class="card-content">
           ${problemRow}
-          ${rows || '<div class="empty">Aucune erreur détectée.</div>'}
+          ${rows || `<div class="empty">${L.no_error}</div>`}
         </div>
         ${footer}
       </ha-card>
@@ -209,6 +235,7 @@ class HaSentinelDevicesCard extends HTMLElement {
   _render() {
     if (!this._config) return;
 
+    const L             = getLabels(this._hass);
     const showOk        = this._config.show_ok === true;
     const maxItems      = this._config.max_items || 10;
     const title         = this._config.title ?? null;
@@ -245,7 +272,7 @@ class HaSentinelDevicesCard extends HTMLElement {
         <ha-icon icon="${problemCount > 0 ? "mdi:devices" : "mdi:check-network"}"
           style="color:${problemCount > 0 ? COLOR.error : COLOR.ok}"></ha-icon>
         <div class="info">
-          <span class="name">Appareils en erreur</span>
+          <span class="name">${L.devices_error}</span>
         </div>
         <span class="value" style="color:${problemCount > 0 ? COLOR.error : COLOR.ok}">
           ${problemCount}
@@ -286,7 +313,7 @@ class HaSentinelDevicesCard extends HTMLElement {
         ${header}
         <div class="card-content">
           ${summaryRow}
-          ${rows || '<div class="empty">Aucune erreur détectée.</div>'}
+          ${rows || `<div class="empty">${L.no_error}</div>`}
         </div>
         ${footer}
       </ha-card>
@@ -319,6 +346,7 @@ class HaSentinelDevicesCard extends HTMLElement {
   }
 
   _renderRow(e) {
+    const L          = getLabels(this._hass);
     const isProblem  = e.state === "on";
     const severity   = isProblem ? (e.attributes.severity || "warning") : "ok";
     const color      = isProblem ? COLOR[severity] || COLOR.warning : COLOR.off;
@@ -327,13 +355,10 @@ class HaSentinelDevicesCard extends HTMLElement {
       : "mdi:check-circle";
     const fullName   = (e.attributes.friendly_name || e.entity_id).replace(/^Sentinel\s+/i, "");
     const name       = fullName.replace(/\s*\([^)]+\)\s*$/, "").trim() || fullName;
-    const reason     = e.attributes.reason || "";
     const deviceUrl  = e.attributes.device_url || null;
-    const stateStr   = isProblem
-      ? (e.attributes.state === "unavailable" ? "Indisponible"
-        : e.attributes.state === "silent"     ? "Muet"
-        : (e.attributes.state || "").replace(/_/g, " "))
-      : "OK";
+    const unavailableCount = (e.attributes.unavailable_entities || []).length;
+    const subtitle   = isProblem && unavailableCount > 0 ? L.unavailable_count(unavailableCount) : "";
+    const stateStr   = isProblem ? L.unavailable : L.ok;
     const nameHtml = deviceUrl
       ? `<a class="device-link" href="${deviceUrl}">${name}</a>`
       : name;
@@ -342,7 +367,7 @@ class HaSentinelDevicesCard extends HTMLElement {
         <ha-icon icon="${icon}" style="color:${color}"></ha-icon>
         <div class="info">
           <span class="name">${nameHtml}</span>
-          ${reason ? `<span class="secondary">${reason}</span>` : ""}
+          ${subtitle ? `<span class="secondary">${subtitle}</span>` : ""}
         </div>
         <span class="value" style="color:${isProblem ? color : "var(--secondary-text-color)"}">
           ${stateStr}
