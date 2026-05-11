@@ -5,20 +5,20 @@
  * ha-sentinel-card — integrations health
  *   type: custom:ha-sentinel-card
  *   title: "Sentinel"        # optional — omit to hide header
- *   show_ok: true            # show healthy items (default: true)
+ *   show_ok: false           # show healthy items (default: false)
  *   max_items: 10            # optional: limit number of rows shown
  *
  * ha-sentinel-devices-card — physical devices health
  *   type: custom:ha-sentinel-devices-card
  *   title: "Appareils"       # optional — omit to hide header
  *   show_ok: false           # show healthy devices (default: false)
- *   max_items: 20            # optional: limit number of rows shown
+ *   max_items: 10            # optional: limit number of rows shown
  *   group_by_source: true    # group by integration source (default: true)
  *
  * Requires: https://github.com/GuiPoM/ha-sentinel
  */
 
-const CARD_VERSION = "0.5.7";
+const CARD_VERSION = "0.5.8";
 
 // Provider identifiers — must match PROVIDER_* constants in sentinel/const.py
 const PROVIDER_INTEGRATIONS = "integrations";
@@ -31,7 +31,9 @@ const LABELS = {
     devices_error:      "Appareils en erreur",
     no_error:           "Aucune erreur détectée.",
     unavailable:        "Indisponible",
+    silent:             "Muet",
     ok:                 "OK",
+    more_items:         (hidden, total) => `+ ${hidden} autre${hidden > 1 ? "s" : ""} sur ${total}`,
     unavailable_count:  (n) => `${n} entité${n > 1 ? "s" : ""} indisponible${n > 1 ? "s" : ""}`,
   },
   en: {
@@ -39,7 +41,9 @@ const LABELS = {
     devices_error:      "Devices with errors",
     no_error:           "No errors detected.",
     unavailable:        "Unavailable",
+    silent:             "Silent",
     ok:                 "OK",
+    more_items:         (hidden, total) => `+ ${hidden} more out of ${total}`,
     unavailable_count:  (n) => `${n} unavailable entit${n > 1 ? "ies" : "y"}`,
   },
 };
@@ -63,8 +67,75 @@ const ICON = {
   ok:      "mdi:check-circle",
 };
 
+// Shared CSS for both cards (injected once per render — unavoidable with innerHTML approach)
+const SHARED_CSS = `
+  ha-card { overflow: hidden; }
+  .card-header { display: flex; align-items: center; gap: 8px; padding: 12px 16px 8px;
+    font-size: 0.875rem; font-weight: 500; color: var(--secondary-text-color);
+    text-transform: uppercase; letter-spacing: 0.05em; }
+  .card-header ha-icon { --mdc-icon-size: 18px; }
+  .card-content { padding: 8px 0; }
+  .row { display: flex; align-items: center; min-height: 48px; padding: 4px 16px;
+    box-sizing: border-box; gap: 16px; }
+  ha-icon { --mdc-icon-size: 24px; flex-shrink: 0; }
+  .info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+  .name { font-size: 0.9em; color: var(--primary-text-color);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .name a.device-link { color: var(--primary-text-color); text-decoration: none; }
+  .name a.device-link:hover { text-decoration: underline; }
+  .secondary { font-size: 0.78em; color: var(--secondary-text-color);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .value { font-size: 0.85em; font-weight: 500; flex-shrink: 0; }
+  .divider { border-top: 1px solid var(--divider-color, rgba(0,0,0,0.12)); margin: 0; }
+  .source-header { padding: 4px 16px 2px; font-size: 0.7em; font-weight: 600;
+    color: var(--secondary-text-color); text-transform: uppercase; letter-spacing: 0.08em; }
+  .footer { padding: 4px 16px 8px; font-size: 0.75em; color: var(--secondary-text-color); text-align: right; }
+  .empty { padding: 8px 16px; color: var(--secondary-text-color); font-size: 0.9em; }
+`;
+
+/**
+ * Extract display name from an entity — strips "Sentinel " prefix and trailing "(source)" suffix.
+ * @param {object} entity - HA state object
+ * @returns {string}
+ */
+function extractDisplayName(entity) {
+  const fullName = (entity.attributes.friendly_name || entity.entity_id)
+    .replace(/^Sentinel\s+/i, "");
+  return fullName.replace(/\s*\([^)]+\)\s*$/, "").trim() || fullName;
+}
+
+/**
+ * Sanitize a URL — only allow relative paths starting with / (HA internal links).
+ * Prevents XSS via javascript: or data: URLs.
+ * @param {string|null} url
+ * @returns {string|null}
+ */
+function sanitizeUrl(url) {
+  if (!url) return null;
+  return /^\//.test(url) ? url : null;
+}
+
+/**
+ * Sort entities by severity (errors first, then warnings, then ok), then by name.
+ * Devices card adds a secondary sort by source.
+ */
+function sortEntities(entities, includeSource = false) {
+  const severityRank = { error: 0, warning: 1, ok: 2 };
+  return [...entities].sort((a, b) => {
+    const ra = a.state === "on" ? (severityRank[a.attributes.severity] ?? 1) : 2;
+    const rb = b.state === "on" ? (severityRank[b.attributes.severity] ?? 1) : 2;
+    if (ra !== rb) return ra - rb;
+    if (includeSource) {
+      const sa = (a.attributes.source || "").toUpperCase();
+      const sb = (b.attributes.source || "").toUpperCase();
+      if (sa !== sb) return sa.localeCompare(sb);
+    }
+    return extractDisplayName(a).localeCompare(extractDisplayName(b));
+  });
+}
+
 // ---------------------------------------------------------------------------
-// HaSentinelCard — integrations health (unchanged from v0.4.1)
+// HaSentinelCard — integrations health
 // ---------------------------------------------------------------------------
 
 class HaSentinelCard extends HTMLElement {
@@ -79,11 +150,12 @@ class HaSentinelCard extends HTMLElement {
   }
 
   getCardSize() {
-    return (this._config?.max_items || 5) + 2;
+    return (this._config?.max_items || 10) + 2;
   }
 
   connectedCallback() {
-    if (!this._built) this._render();
+    // Always re-render on reconnect — HA may have mounted/unmounted the card
+    this._render();
   }
 
   _getSentinelEntities() {
@@ -101,22 +173,10 @@ class HaSentinelCard extends HTMLElement {
     const maxItems = this._config.max_items || 10;
     const title    = this._config.title ?? null;
 
-    // --- sort entities ---
-    const severityRank = { error: 0, warning: 1, ok: 2 };
     const allEntities  = this._getSentinelEntities();
     const problemCount = allEntities.filter((e) => e.state === "on").length;
-    let entities = allEntities;
-
-    if (!showOk) entities = entities.filter((e) => e.state === "on");
-
-    entities.sort((a, b) => {
-      const ra = a.state === "on" ? (severityRank[a.attributes.severity] ?? 1) : 2;
-      const rb = b.state === "on" ? (severityRank[b.attributes.severity] ?? 1) : 2;
-      if (ra !== rb) return ra - rb;
-      const na = (a.attributes.friendly_name || a.entity_id).replace(/^Sentinel\s+/i, "");
-      const nb = (b.attributes.friendly_name || b.entity_id).replace(/^Sentinel\s+/i, "");
-      return na.localeCompare(nb);
-    });
+    let entities = showOk ? allEntities : allEntities.filter((e) => e.state === "on");
+    entities = sortEntities(entities);
 
     const total = entities.length;
     let hidden = 0;
@@ -125,7 +185,6 @@ class HaSentinelCard extends HTMLElement {
       entities = entities.slice(0, maxItems);
     }
 
-    // --- build rows HTML ---
     const problemRow = `
       <div class="row">
         <ha-icon icon="${problemCount > 0 ? "mdi:puzzle-remove" : "mdi:puzzle-check"}"
@@ -144,10 +203,9 @@ class HaSentinelCard extends HTMLElement {
       const isProblem = e.state === "on";
       const severity  = isProblem ? (e.attributes.severity || "warning") : "ok";
       const color     = isProblem ? COLOR[severity] || COLOR.warning : COLOR.off;
-      const icon      = isProblem ? ICON[severity]  || ICON.warning  : ICON.ok;
-      const fullName  = (e.attributes.friendly_name || e.entity_id).replace(/^Sentinel\s+/i, "");
+      const icon      = isProblem ? ICON[severity] || ICON.warning : ICON.ok;
+      const name      = extractDisplayName(e);
       const domain    = e.attributes.domain || "";
-      const name      = fullName.replace(/\s*\([^)]+\)\s*$/, "").trim() || fullName;
       const reason    = e.attributes.reason || "";
       const stateStr  = isProblem ? (e.attributes.state || "").replace(/_/g, " ") : L.ok;
 
@@ -165,9 +223,7 @@ class HaSentinelCard extends HTMLElement {
       `;
     }).join("");
 
-    const footer = hidden > 0
-      ? `<div class="footer">+ ${hidden} autre${hidden > 1 ? "s" : ""} sur ${total}</div>`
-      : "";
+    const footer = hidden > 0 ? `<div class="footer">${L.more_items(hidden, total)}</div>` : "";
 
     const header = title !== null ? `
       <div class="card-header">
@@ -185,28 +241,8 @@ class HaSentinelCard extends HTMLElement {
         </div>
         ${footer}
       </ha-card>
-      <style>
-        ha-card { overflow: hidden; }
-        .card-header { display: flex; align-items: center; gap: 8px; padding: 12px 16px 8px;
-          font-size: 0.875rem; font-weight: 500; color: var(--secondary-text-color);
-          text-transform: uppercase; letter-spacing: 0.05em; }
-        .card-header ha-icon { --mdc-icon-size: 18px; }
-        .card-content { padding: 8px 0; }
-        .row { display: flex; align-items: center; min-height: 52px; padding: 4px 16px;
-          box-sizing: border-box; gap: 16px; }
-        ha-icon { --mdc-icon-size: 24px; flex-shrink: 0; }
-        .info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
-        .name { font-size: 0.9em; color: var(--primary-text-color);
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .secondary { font-size: 0.78em; color: var(--secondary-text-color);
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .value { font-size: 0.85em; font-weight: 500; flex-shrink: 0; }
-        .divider { border-top: 1px solid var(--divider-color, rgba(0,0,0,0.12)); margin: 0; }
-        .footer { padding: 4px 16px 8px; font-size: 0.75em; color: var(--secondary-text-color); text-align: right; }
-        .empty { padding: 8px 16px; color: var(--secondary-text-color); font-size: 0.9em; }
-      </style>
+      <style>${SHARED_CSS}</style>
     `;
-    this._built = true;
   }
 }
 
@@ -223,7 +259,7 @@ class HaSentinelDevicesCard extends HTMLElement {
 
   getCardSize() { return (this._config?.max_items || 10) + 2; }
 
-  connectedCallback() { if (!this._built) this._render(); }
+  connectedCallback() { this._render(); }
 
   _getDeviceEntities() {
     if (!this._hass) return [];
@@ -241,24 +277,10 @@ class HaSentinelDevicesCard extends HTMLElement {
     const title         = this._config.title ?? null;
     const groupBySource = this._config.group_by_source !== false;
 
-    const severityRank = { error: 0, warning: 1, ok: 2 };
-    const allEntities = this._getDeviceEntities();
+    const allEntities  = this._getDeviceEntities();
     const problemCount = allEntities.filter((e) => e.state === "on").length;
-    let entities = allEntities;
-
-    if (!showOk) entities = entities.filter((e) => e.state === "on");
-
-    entities.sort((a, b) => {
-      const ra = a.state === "on" ? (severityRank[a.attributes.severity] ?? 1) : 2;
-      const rb = b.state === "on" ? (severityRank[b.attributes.severity] ?? 1) : 2;
-      if (ra !== rb) return ra - rb;
-      const sa = (a.attributes.source || "").toUpperCase();
-      const sb = (b.attributes.source || "").toUpperCase();
-      if (sa !== sb) return sa.localeCompare(sb);
-      const na = (a.attributes.friendly_name || a.entity_id).replace(/^Sentinel\s+/i, "");
-      const nb = (b.attributes.friendly_name || b.entity_id).replace(/^Sentinel\s+/i, "");
-      return na.localeCompare(nb);
-    });
+    let entities = showOk ? allEntities : allEntities.filter((e) => e.state === "on");
+    entities = sortEntities(entities, true);
 
     const total = entities.length;
     let hidden = 0;
@@ -291,15 +313,13 @@ class HaSentinelDevicesCard extends HTMLElement {
           rows += `<div class="source-header">${source}</div>`;
           currentSource = source;
         }
-        rows += this._renderRow(e);
+        rows += this._renderRow(e, L);
       }
     } else {
-      rows = entities.map((e) => this._renderRow(e)).join("");
+      rows = entities.map((e) => this._renderRow(e, L)).join("");
     }
 
-    const footer = hidden > 0
-      ? `<div class="footer">+ ${hidden} autre${hidden > 1 ? "s" : ""} sur ${total}</div>`
-      : "";
+    const footer = hidden > 0 ? `<div class="footer">${L.more_items(hidden, total)}</div>` : "";
 
     const header = title !== null ? `
       <div class="card-header">
@@ -317,51 +337,28 @@ class HaSentinelDevicesCard extends HTMLElement {
         </div>
         ${footer}
       </ha-card>
-      <style>
-        ha-card { overflow: hidden; }
-        .card-header { display: flex; align-items: center; gap: 8px; padding: 12px 16px 8px;
-          font-size: 0.875rem; font-weight: 500; color: var(--secondary-text-color);
-          text-transform: uppercase; letter-spacing: 0.05em; }
-        .card-header ha-icon { --mdc-icon-size: 18px; }
-        .card-content { padding: 8px 0; }
-        .source-header { padding: 4px 16px 2px; font-size: 0.7em; font-weight: 600;
-          color: var(--secondary-text-color); text-transform: uppercase; letter-spacing: 0.08em; }
-        .row { display: flex; align-items: center; min-height: 48px; padding: 4px 16px;
-          box-sizing: border-box; gap: 16px; }
-        ha-icon { --mdc-icon-size: 24px; flex-shrink: 0; }
-        .info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
-        .name { font-size: 0.9em; color: var(--primary-text-color);
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .name a.device-link { color: var(--primary-text-color); text-decoration: none; }
-        .name a.device-link:hover { text-decoration: underline; }
-        .secondary { font-size: 0.78em; color: var(--secondary-text-color);
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .value { font-size: 0.85em; font-weight: 500; flex-shrink: 0; }
-        .divider { border-top: 1px solid var(--divider-color, rgba(0,0,0,0.12)); margin: 0; }
-        .footer { padding: 4px 16px 8px; font-size: 0.75em; color: var(--secondary-text-color); text-align: right; }
-        .empty { padding: 8px 16px; color: var(--secondary-text-color); font-size: 0.9em; }
-      </style>
+      <style>${SHARED_CSS}</style>
     `;
-    this._built = true;
   }
 
-  _renderRow(e) {
-    const L          = getLabels(this._hass);
-    const isProblem  = e.state === "on";
-    const severity   = isProblem ? (e.attributes.severity || "warning") : "ok";
-    const color      = isProblem ? COLOR[severity] || COLOR.warning : COLOR.off;
-    const icon       = isProblem
-      ? (severity === "error" ? "mdi:alert-circle" : "mdi:alert")
-      : "mdi:check-circle";
-    const fullName   = (e.attributes.friendly_name || e.entity_id).replace(/^Sentinel\s+/i, "");
-    const name       = fullName.replace(/\s*\([^)]+\)\s*$/, "").trim() || fullName;
-    const deviceUrl  = e.attributes.device_url || null;
+  _renderRow(e, L) {
+    const isProblem        = e.state === "on";
+    const severity         = isProblem ? (e.attributes.severity || "warning") : "ok";
+    const color            = isProblem ? COLOR[severity] || COLOR.warning : COLOR.off;
+    const icon             = isProblem ? ICON[severity] || ICON.warning : ICON.ok;
+    const name             = extractDisplayName(e);
+    const deviceUrl        = sanitizeUrl(e.attributes.device_url);
     const unavailableCount = (e.attributes.unavailable_entities || []).length;
-    const subtitle   = isProblem && unavailableCount > 0 ? L.unavailable_count(unavailableCount) : "";
-    const stateStr   = isProblem ? L.unavailable : L.ok;
+    const subtitle         = isProblem && unavailableCount > 0 ? L.unavailable_count(unavailableCount) : "";
+    const stateStr         = isProblem
+      ? (e.attributes.state === "unavailable" ? L.unavailable
+        : e.attributes.state === "silent"     ? L.silent
+        : (e.attributes.state || "").replace(/_/g, " "))
+      : L.ok;
     const nameHtml = deviceUrl
       ? `<a class="device-link" href="${deviceUrl}">${name}</a>`
       : name;
+
     return `
       <div class="row">
         <ha-icon icon="${icon}" style="color:${color}"></ha-icon>
