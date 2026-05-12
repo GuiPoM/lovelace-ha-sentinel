@@ -10,25 +10,33 @@
  *
  * ha-sentinel-devices-card — physical devices health
  *   type: custom:ha-sentinel-devices-card
- *   title: "Appareils"       # optional — omit to hide header
+ *   title: "Devices"         # optional — omit to hide header
  *   show_ok: false           # show healthy devices (default: false)
  *   max_items: 10            # optional: limit number of rows shown
  *   group_by_source: true    # group by integration source (default: true)
  *
+ * ha-sentinel-apps-card — HA OS add-ons health
+ *   type: custom:ha-sentinel-apps-card
+ *   title: "Add-ons"         # optional — omit to hide header
+ *   show_ok: false           # show healthy add-ons (default: false)
+ *   max_items: 10            # optional: limit number of rows shown
+ *
  * Requires: https://github.com/GuiPoM/ha-sentinel
  */
 
-const CARD_VERSION = "0.5.8";
+const CARD_VERSION = "0.6.0";
 
 // Provider identifiers — must match PROVIDER_* constants in sentinel/const.py
 const PROVIDER_INTEGRATIONS = "integrations";
 const PROVIDER_DEVICES = "devices";
+const PROVIDER_APPS = "apps";
 
 // Localization — auto-detected from hass.language
 const LABELS = {
   fr: {
     integrations_error: "Intégrations en erreur",
     devices_error:      "Appareils en erreur",
+    apps_error:         "Add-ons en erreur",
     no_error:           "Aucune erreur détectée.",
     unavailable:        "Indisponible",
     silent:             "Muet",
@@ -39,6 +47,7 @@ const LABELS = {
   en: {
     integrations_error: "Integrations with errors",
     devices_error:      "Devices with errors",
+    apps_error:         "Add-ons with errors",
     no_error:           "No errors detected.",
     unavailable:        "Unavailable",
     silent:             "Silent",
@@ -376,6 +385,110 @@ class HaSentinelDevicesCard extends HTMLElement {
 
 customElements.define("ha-sentinel-devices-card", HaSentinelDevicesCard);
 
+// ---------------------------------------------------------------------------
+// HaSentinelAppsCard — HA OS add-ons health (requires HA OS / Supervisor)
+// ---------------------------------------------------------------------------
+
+class HaSentinelAppsCard extends HTMLElement {
+  set hass(hass) { this._hass = hass; this._render(); }
+
+  setConfig(config) { this._config = config; if (this._hass) this._render(); }
+
+  getCardSize() { return (this._config?.max_items || 10) + 2; }
+
+  connectedCallback() { this._render(); }
+
+  _getAppsEntities() {
+    if (!this._hass) return [];
+    return Object.values(this._hass.states).filter(
+      (s) => s.attributes.provider === PROVIDER_APPS
+    );
+  }
+
+  _render() {
+    if (!this._config) return;
+
+    const L        = getLabels(this._hass);
+    const showOk   = this._config.show_ok === true;
+    const maxItems = this._config.max_items || 10;
+    const title    = this._config.title ?? null;
+
+    const allEntities  = this._getAppsEntities();
+    const problemCount = allEntities.filter((e) => e.state === "on").length;
+    let entities = showOk ? allEntities : allEntities.filter((e) => e.state === "on");
+    entities = sortEntities(entities);
+
+    const total = entities.length;
+    let hidden = 0;
+    if (maxItems && entities.length > maxItems) {
+      hidden   = entities.length - maxItems;
+      entities = entities.slice(0, maxItems);
+    }
+
+    const summaryRow = `
+      <div class="row">
+        <ha-icon icon="${problemCount > 0 ? "mdi:puzzle-remove" : "mdi:puzzle-check"}"
+          style="color:${problemCount > 0 ? COLOR.error : COLOR.ok}"></ha-icon>
+        <div class="info">
+          <span class="name">${L.apps_error}</span>
+        </div>
+        <span class="value" style="color:${problemCount > 0 ? COLOR.error : COLOR.ok}">
+          ${problemCount}
+        </span>
+      </div>
+      <div class="divider"></div>
+    `;
+
+    const rows = entities.map((e) => {
+      const isProblem = e.state === "on";
+      const severity  = isProblem ? (e.attributes.severity || "warning") : "ok";
+      const color     = isProblem ? COLOR[severity] || COLOR.warning : COLOR.off;
+      const icon      = isProblem ? ICON[severity] || ICON.warning : ICON.ok;
+      const name      = extractDisplayName(e);
+      const slug      = e.attributes.slug || "";
+      const stateStr  = isProblem
+        ? (e.attributes.state || "").replace(/_/g, " ")
+        : L.ok;
+
+      return `
+        <div class="row">
+          <ha-icon icon="${icon}" style="color:${color}"></ha-icon>
+          <div class="info">
+            <span class="name">${name}</span>
+            ${slug ? `<span class="secondary">${slug}</span>` : ""}
+          </div>
+          <span class="value" style="color:${isProblem ? color : "var(--secondary-text-color)"}">
+            ${stateStr}
+          </span>
+        </div>
+      `;
+    }).join("");
+
+    const footer = hidden > 0 ? `<div class="footer">${L.more_items(hidden, total)}</div>` : "";
+
+    const header = title !== null ? `
+      <div class="card-header">
+        <ha-icon icon="mdi:puzzle" class="header-icon"></ha-icon>
+        <span>${title}</span>
+      </div>
+    ` : "";
+
+    this.innerHTML = `
+      <ha-card>
+        ${header}
+        <div class="card-content">
+          ${summaryRow}
+          ${rows || `<div class="empty">${L.no_error}</div>`}
+        </div>
+        ${footer}
+      </ha-card>
+      <style>${SHARED_CSS}</style>
+    `;
+  }
+}
+
+customElements.define("ha-sentinel-apps-card", HaSentinelAppsCard);
+
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: "ha-sentinel-card",
@@ -388,6 +501,13 @@ window.customCards.push({
   type: "ha-sentinel-devices-card",
   name: "Sentinel Devices Card",
   description: "Health status of your physical devices. Requires the Sentinel integration.",
+  preview: false,
+  documentationURL: "https://github.com/GuiPoM/lovelace-ha-sentinel",
+});
+window.customCards.push({
+  type: "ha-sentinel-apps-card",
+  name: "Sentinel Apps Card",
+  description: "Health status of your HA OS add-ons. Requires the Sentinel integration (HA OS only).",
   preview: false,
   documentationURL: "https://github.com/GuiPoM/lovelace-ha-sentinel",
 });

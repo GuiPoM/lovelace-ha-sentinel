@@ -16,6 +16,7 @@
 |---|---|---|---|
 | `ha-sentinel-card` | `PROVIDER_INTEGRATIONS` | `false` | Integration health |
 | `ha-sentinel-devices-card` | `PROVIDER_DEVICES` | `false` | Physical device health |
+| `ha-sentinel-apps-card` | `PROVIDER_APPS` | `false` | HA OS add-on health |
 
 ---
 
@@ -25,7 +26,7 @@ Single JS file — shared helpers at the top, then two classes:
 
 ```
 CARD_VERSION
-PROVIDER_INTEGRATIONS / PROVIDER_DEVICES   — must match sentinel/const.py
+PROVIDER_INTEGRATIONS / PROVIDER_DEVICES / PROVIDER_APPS   — must match sentinel/const.py
 LABELS (fr/en)                             — all UI strings
 getLabels(hass)                            — auto-detect language from hass.language
 COLOR / ICON                               — shared color/icon maps
@@ -213,7 +214,7 @@ HA mounts/unmounts cards when navigating between dashboards. A guard would leave
 ## Coding Rules
 
 - No French in code — all UI strings in `LABELS.fr` only
-- No magic strings for provider names — use `PROVIDER_INTEGRATIONS` / `PROVIDER_DEVICES`
+- No magic strings for provider names — use `PROVIDER_INTEGRATIONS` / `PROVIDER_DEVICES` / `PROVIDER_APPS`
 - No entity_id prefix filtering — filter by `provider` attribute only
 - No hardcoded text outside `LABELS` — including footer, empty states, state strings
 - No inline icon strings — use `ICON[]`

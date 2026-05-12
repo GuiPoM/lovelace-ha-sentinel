@@ -4,7 +4,7 @@
 [![GitHub release](https://img.shields.io/github/release/GuiPoM/lovelace-ha-sentinel.svg)](https://github.com/GuiPoM/lovelace-ha-sentinel/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
-**Lovelace cards for [Sentinel](https://github.com/GuiPoM/ha-sentinel) — a visual health dashboard for your Home Assistant integrations and devices.**
+**Lovelace cards for [Sentinel](https://github.com/GuiPoM/ha-sentinel) — a visual health dashboard for your Home Assistant integrations, devices and add-ons.**
 
 > **Requires:** [Sentinel integration](https://github.com/GuiPoM/ha-sentinel) installed and configured.
 
@@ -14,12 +14,13 @@
 
 ## Cards
 
-This package provides two independent cards:
+This package provides three independent cards:
 
 | Card | Type | Shows |
 |---|---|---|
 | `ha-sentinel-card` | Integrations | Config entries (Netatmo, Z-Wave, MQTT…) |
 | `ha-sentinel-devices-card` | Devices | Physical devices (sensors, locks, lights…) |
+| `ha-sentinel-apps-card` | Add-ons | HA OS add-ons (Mosquitto, Zigbee2MQTT…) — HA OS only |
 
 ---
 
@@ -78,6 +79,20 @@ Shows physical devices monitored by Sentinel, grouped by integration source.
 | `max_items` | number | `10` | Maximum rows to display |
 | `group_by_source` | boolean | `true` | Group devices by integration source |
 
+### Apps card (HA OS only)
+
+```yaml
+type: custom:ha-sentinel-apps-card
+```
+
+Shows HA OS add-on health. Only displays data on HA OS / Supervised installations — shows "No errors detected" on other installation types.
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `title` | string | — | Card title (omit to hide header) |
+| `show_ok` | boolean | `false` | Show healthy add-ons |
+| `max_items` | number | `10` | Maximum rows to display |
+
 ---
 
 ## Examples
@@ -89,6 +104,7 @@ type: vertical-stack
 cards:
   - type: custom:ha-sentinel-card
   - type: custom:ha-sentinel-devices-card
+  - type: custom:ha-sentinel-apps-card
 ```
 
 ### With titles and show all
@@ -105,6 +121,10 @@ cards:
     show_ok: true
     max_items: 20
     group_by_source: true
+  - type: custom:ha-sentinel-apps-card
+    title: "Add-ons"
+    show_ok: true
+    max_items: 10
 ```
 
 ---
@@ -113,10 +133,9 @@ cards:
 
 | Display | Meaning |
 |---|---|
-| `En erreur` / `setup error` | Integration or device has a real problem |
-| `Warning` / `setup retry` | Integration is retrying — may self-recover |
-| `Indisponible` | Device entity is unavailable |
-| `Muet` | Device has not reported in >24h |
+| `setup error` / `error` | Integration, device or add-on has a real problem |
+| `setup retry` / `unknown` | Retrying or in unknown state — may self-recover |
+| `Unavailable` | Device entity is unavailable |
 | `OK` | Healthy (shown only when `show_ok: true`) |
 
 ---
