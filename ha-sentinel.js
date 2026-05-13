@@ -24,7 +24,7 @@
  * Requires: https://github.com/GuiPoM/ha-sentinel
  */
 
-const CARD_VERSION = "0.6.0";
+const CARD_VERSION = "0.7.0";
 
 // Provider identifiers — must match PROVIDER_* constants in sentinel/const.py
 const PROVIDER_INTEGRATIONS = "integrations";
@@ -34,26 +34,58 @@ const PROVIDER_APPS = "apps";
 // Localization — auto-detected from hass.language
 const LABELS = {
   fr: {
+    // Summary rows
     integrations_error: "Intégrations en erreur",
     devices_error:      "Appareils en erreur",
     apps_error:         "Applications en erreur",
     no_error:           "Aucune erreur détectée.",
-    unavailable:        "Indisponible",
-    silent:             "Muet",
     ok:                 "OK",
     more_items:         (hidden, total) => `+ ${hidden} autre${hidden > 1 ? "s" : ""} sur ${total}`,
     unavailable_count:  (n) => `${n} entité${n > 1 ? "s" : ""} indisponible${n > 1 ? "s" : ""}`,
+    // Integration states
+    state_loaded:              "Chargée",
+    state_setup_error:         "Erreur de configuration",
+    state_migration_error:     "Erreur de migration",
+    state_setup_retry:         "Nouvelle tentative",
+    state_not_loaded:          "Non chargée",
+    state_failed_unload:       "Échec du déchargement",
+    state_setup_in_progress:   "Configuration en cours",
+    state_unload_in_progress:  "Déchargement en cours",
+    // Device states
+    state_unavailable:         "Indisponible",
+    // App states
+    state_started:  "Démarrée",
+    state_error:    "En erreur",
+    state_stopped:  "Arrêtée",
+    state_unknown:  "Inconnu",
+    state_startup:  "Démarrage",
   },
   en: {
+    // Summary rows
     integrations_error: "Integrations with errors",
     devices_error:      "Devices with errors",
     apps_error:         "Applications with errors",
     no_error:           "No errors detected.",
-    unavailable:        "Unavailable",
-    silent:             "Silent",
     ok:                 "OK",
     more_items:         (hidden, total) => `+ ${hidden} more out of ${total}`,
     unavailable_count:  (n) => `${n} unavailable entit${n > 1 ? "ies" : "y"}`,
+    // Integration states
+    state_loaded:              "Loaded",
+    state_setup_error:         "Setup error",
+    state_migration_error:     "Migration error",
+    state_setup_retry:         "Setup retry",
+    state_not_loaded:          "Not loaded",
+    state_failed_unload:       "Failed to unload",
+    state_setup_in_progress:   "Setup in progress",
+    state_unload_in_progress:  "Unload in progress",
+    // Device states
+    state_unavailable:         "Unavailable",
+    // App states
+    state_started:  "Started",
+    state_error:    "Error",
+    state_stopped:  "Stopped",
+    state_unknown:  "Unknown",
+    state_startup:  "Starting up",
   },
 };
 
@@ -122,6 +154,21 @@ function extractDisplayName(entity) {
 function sanitizeUrl(url) {
   if (!url) return null;
   return /^\//.test(url) ? url : null;
+}
+
+/**
+ * Localize a raw state string using LABELS.
+ * Looks up `state_<raw>` key first; falls back to capitalized underscores-to-spaces.
+ * @param {string} state - raw state value (e.g. "setup_error")
+ * @param {object} L - labels object from getLabels()
+ * @returns {string}
+ */
+function localizeState(state, L) {
+  if (!state) return "";
+  const key = `state_${state}`;
+  if (L[key]) return L[key];
+  // Fallback: replace underscores with spaces, capitalize first letter
+  return state.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
 }
 
 /**
@@ -194,7 +241,7 @@ class HaSentinelCard extends HTMLElement {
       entities = entities.slice(0, maxItems);
     }
 
-    const problemRow = `
+    const summaryRow = `
       <div class="row">
         <ha-icon icon="${problemCount > 0 ? "mdi:puzzle-remove" : "mdi:puzzle-check"}"
           style="color:${problemCount > 0 ? COLOR.error : COLOR.ok}"></ha-icon>
@@ -216,14 +263,14 @@ class HaSentinelCard extends HTMLElement {
       const name      = extractDisplayName(e);
       const domain    = e.attributes.domain || "";
       const reason    = e.attributes.reason || "";
-      const stateStr  = isProblem ? (e.attributes.state || "").replace(/_/g, " ") : L.ok;
+      const stateStr  = isProblem ? localizeState(e.attributes.state, L) : L.ok;
 
       return `
         <div class="row">
           <ha-icon icon="${icon}" style="color:${color}"></ha-icon>
           <div class="info">
             <span class="name">${name}</span>
-            <span class="secondary">${reason || domain}</span>
+            ${isProblem ? `<span class="secondary">${reason || domain}</span>` : ""}
           </div>
           <span class="value" style="color:${isProblem ? color : "var(--secondary-text-color)"}">
             ${stateStr}
@@ -245,7 +292,7 @@ class HaSentinelCard extends HTMLElement {
       <ha-card>
         ${header}
         <div class="card-content">
-          ${problemRow}
+          ${summaryRow}
           ${rows || `<div class="empty">${L.no_error}</div>`}
         </div>
         ${footer}
@@ -359,11 +406,7 @@ class HaSentinelDevicesCard extends HTMLElement {
     const deviceUrl        = sanitizeUrl(e.attributes.device_url);
     const unavailableCount = (e.attributes.unavailable_entities || []).length;
     const subtitle         = isProblem && unavailableCount > 0 ? L.unavailable_count(unavailableCount) : "";
-    const stateStr         = isProblem
-      ? (e.attributes.state === "unavailable" ? L.unavailable
-        : e.attributes.state === "silent"     ? L.silent
-        : (e.attributes.state || "").replace(/_/g, " "))
-      : L.ok;
+    const stateStr         = isProblem ? localizeState(e.attributes.state, L) : L.ok;
     const nameHtml = deviceUrl
       ? `<a class="device-link" href="${deviceUrl}">${name}</a>`
       : name;
@@ -427,7 +470,7 @@ class HaSentinelAppsCard extends HTMLElement {
 
     const summaryRow = `
       <div class="row">
-        <ha-icon icon="${problemCount > 0 ? "mdi:puzzle-remove" : "mdi:puzzle-check"}"
+        <ha-icon icon="${problemCount > 0 ? "mdi:puzzle-remove" : "mdi:puzzle-off"}"
           style="color:${problemCount > 0 ? COLOR.error : COLOR.ok}"></ha-icon>
         <div class="info">
           <span class="name">${L.apps_error}</span>
@@ -446,9 +489,7 @@ class HaSentinelAppsCard extends HTMLElement {
       const icon      = isProblem ? ICON[severity] || ICON.warning : ICON.ok;
       const name      = extractDisplayName(e);
       const slug      = e.attributes.slug || "";
-      const stateStr  = isProblem
-        ? (e.attributes.state || "").replace(/_/g, " ")
-        : L.ok;
+      const stateStr  = isProblem ? localizeState(e.attributes.state, L) : L.ok;
 
       return `
         <div class="row">
