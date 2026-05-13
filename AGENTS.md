@@ -177,7 +177,7 @@ Single CSS constant used by all three cards. Add styles here, not inline in `inn
 |---|---|---|
 | Integrations | `mdi:puzzle-check` | `mdi:puzzle-remove` |
 | Devices | `mdi:check-network` | `mdi:devices` |
-| Apps | `mdi:puzzle` | `mdi:puzzle-remove` |
+| Apps | `mdi:puzzle-check` | `mdi:puzzle-remove` |
 
 ### Header icons (per card)
 
