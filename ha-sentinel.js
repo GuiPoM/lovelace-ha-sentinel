@@ -15,10 +15,10 @@
  *   max_items: 10            # optional: limit number of rows shown
  *   group_by_source: true    # group by integration source (default: true)
  *
- * ha-sentinel-apps-card — HA OS add-ons health
+ * ha-sentinel-apps-card — HA OS applications (add-ons) health
  *   type: custom:ha-sentinel-apps-card
- *   title: "Add-ons"         # optional — omit to hide header
- *   show_ok: false           # show healthy add-ons (default: false)
+ *   title: "Applications"    # optional — omit to hide header
+ *   show_ok: false           # show healthy applications (default: false)
  *   max_items: 10            # optional: limit number of rows shown
  *
  * Requires: https://github.com/GuiPoM/ha-sentinel
@@ -36,7 +36,7 @@ const LABELS = {
   fr: {
     integrations_error: "Intégrations en erreur",
     devices_error:      "Appareils en erreur",
-    apps_error:         "Add-ons en erreur",
+    apps_error:         "Applications en erreur",
     no_error:           "Aucune erreur détectée.",
     unavailable:        "Indisponible",
     silent:             "Muet",
@@ -47,7 +47,7 @@ const LABELS = {
   en: {
     integrations_error: "Integrations with errors",
     devices_error:      "Devices with errors",
-    apps_error:         "Add-ons with errors",
+    apps_error:         "Applications with errors",
     no_error:           "No errors detected.",
     unavailable:        "Unavailable",
     silent:             "Silent",
@@ -386,7 +386,7 @@ class HaSentinelDevicesCard extends HTMLElement {
 customElements.define("ha-sentinel-devices-card", HaSentinelDevicesCard);
 
 // ---------------------------------------------------------------------------
-// HaSentinelAppsCard — HA OS add-ons health (requires HA OS / Supervisor)
+// HaSentinelAppsCard — HA OS applications (add-ons) health
 // ---------------------------------------------------------------------------
 
 class HaSentinelAppsCard extends HTMLElement {
@@ -507,7 +507,7 @@ window.customCards.push({
 window.customCards.push({
   type: "ha-sentinel-apps-card",
   name: "Sentinel Apps Card",
-  description: "Health status of your HA OS add-ons. Requires the Sentinel integration (HA OS only).",
+  description: "Health status of your HA OS applications (add-ons). Requires the Sentinel integration (HA OS only).",
   preview: false,
   documentationURL: "https://github.com/GuiPoM/lovelace-ha-sentinel",
 });
