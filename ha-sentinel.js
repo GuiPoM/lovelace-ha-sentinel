@@ -470,7 +470,7 @@ class HaSentinelAppsCard extends HTMLElement {
 
     const summaryRow = `
       <div class="row">
-        <ha-icon icon="${problemCount > 0 ? "mdi:puzzle-remove" : "mdi:puzzle-off"}"
+        <ha-icon icon="${problemCount > 0 ? "mdi:puzzle-remove" : "mdi:puzzle"}"
           style="color:${problemCount > 0 ? COLOR.error : COLOR.ok}"></ha-icon>
         <div class="info">
           <span class="name">${L.apps_error}</span>
