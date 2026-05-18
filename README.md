@@ -1,6 +1,6 @@
 # Sentinel Card
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
+[![Install via HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=GuiPoM&repository=lovelace-ha-sentinel&category=plugin)
 [![GitHub release](https://img.shields.io/github/release/GuiPoM/lovelace-ha-sentinel.svg)](https://github.com/GuiPoM/lovelace-ha-sentinel/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 
@@ -26,12 +26,17 @@ This package provides three independent cards:
 
 ## Installation
 
-### Via HACS (recommended)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=GuiPoM&repository=lovelace-ha-sentinel&category=plugin)
 
-1. In HACS, go to **Frontend** → **Custom repositories**
+<details>
+<summary>Install via HACS (manual steps)</summary>
+
+1. In HACS, go to **Frontend** → three-dot menu → **Custom repositories**
 2. Add `https://github.com/GuiPoM/lovelace-ha-sentinel` — type **Dashboard**
 3. Search for **Sentinel Card** and install
 4. Clear browser cache
+
+</details>
 
 <details>
 <summary>Manual installation</summary>
