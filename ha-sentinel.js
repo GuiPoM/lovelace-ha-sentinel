@@ -6,12 +6,14 @@
  *   type: custom:ha-sentinel-card
  *   title: "Sentinel"        # optional — omit to hide header
  *   show_ok: false           # show healthy items (default: false)
+ *   show_ignored: false      # show intentionally excluded items (default: false)
  *   max_items: 10            # optional: limit number of rows shown
  *
  * ha-sentinel-devices-card — physical devices health
  *   type: custom:ha-sentinel-devices-card
  *   title: "Devices"         # optional — omit to hide header
  *   show_ok: false           # show healthy devices (default: false)
+ *   show_ignored: false      # show intentionally ignored sources/devices (default: false)
  *   max_items: 10            # optional: limit number of rows shown
  *   group_by_source: true    # group by integration source (default: true)
  *
@@ -19,12 +21,17 @@
  *   type: custom:ha-sentinel-apps-card
  *   title: "Applications"    # optional — omit to hide header
  *   show_ok: false           # show healthy applications (default: false)
+ *   show_ignored: false      # show intentionally ignored add-ons (default: false)
  *   max_items: 10            # optional: limit number of rows shown
+ *
+ * ha-sentinel-ignored-card — list of intentionally excluded items (reminder)
+ *   type: custom:ha-sentinel-ignored-card
+ *   title: "Exclusions"      # optional — omit to hide header
  *
  * Requires: https://github.com/GuiPoM/ha-sentinel
  */
 
-const CARD_VERSION = "0.7.0";
+const CARD_VERSION = "0.7.2";
 
 // Provider identifiers — must match PROVIDER_* constants in sentinel/const.py
 const PROVIDER_INTEGRATIONS = "integrations";
@@ -59,6 +66,14 @@ const LABELS = {
     state_stopped:  "Arrêtée",
     state_unknown:  "Inconnu",
     state_startup:  "Démarrage",
+    // Ignored section
+    ignored:                  "Ignoré",
+    ignored_integrations:     "Intégrations exclues",
+    ignored_sources:          "Sources d'appareils ignorées",
+    ignored_devices:          "Appareils ignorés",
+    ignored_apps:             "Add-ons ignorés",
+    no_exclusions:            "Aucune exclusion configurée.",
+    ignored_sensor_missing:   "Capteur Sentinel introuvable.",
   },
   en: {
     // Summary rows
@@ -86,6 +101,14 @@ const LABELS = {
     state_stopped:  "Stopped",
     state_unknown:  "Unknown",
     state_startup:  "Starting up",
+    // Ignored section
+    ignored:                  "Ignored",
+    ignored_integrations:     "Excluded integrations",
+    ignored_sources:          "Ignored device sources",
+    ignored_devices:          "Ignored devices",
+    ignored_apps:             "Ignored add-ons",
+    no_exclusions:            "No exclusions configured.",
+    ignored_sensor_missing:   "Sentinel sensor not found.",
   },
 };
 
@@ -132,6 +155,9 @@ const SHARED_CSS = `
     color: var(--secondary-text-color); text-transform: uppercase; letter-spacing: 0.08em; }
   .footer { padding: 4px 16px 8px; font-size: 0.75em; color: var(--secondary-text-color); text-align: right; }
   .empty { padding: 8px 16px; color: var(--secondary-text-color); font-size: 0.9em; }
+  .ignored-header { padding: 6px 16px 2px; font-size: 0.7em; font-weight: 600;
+    color: var(--disabled-color, #bdbdbd); text-transform: uppercase; letter-spacing: 0.08em; }
+  .ignored-row { opacity: 0.6; }
 `;
 
 /**
@@ -190,6 +216,19 @@ function sortEntities(entities, includeSource = false) {
   });
 }
 
+/**
+ * Find the Sentinel ignored-items sensor in hass.states.
+ * Identified by sentinel_data_type="ignored_items" attribute — independent of entity_id.
+ * @param {object} hass
+ * @returns {object|null}
+ */
+function findIgnoredItemsSensor(hass) {
+  if (!hass) return null;
+  return Object.values(hass.states).find(
+    (s) => s.attributes.sentinel_data_type === "ignored_items"
+  ) || null;
+}
+
 // ---------------------------------------------------------------------------
 // HaSentinelCard — integrations health
 // ---------------------------------------------------------------------------
@@ -226,6 +265,7 @@ class HaSentinelCard extends HTMLElement {
 
     const L        = getLabels(this._hass);
     const showOk   = this._config.show_ok === true;
+    const showIgnored = this._config.show_ignored === true;
     const maxItems = this._config.max_items || 10;
     const title    = this._config.title ?? null;
 
@@ -279,6 +319,30 @@ class HaSentinelCard extends HTMLElement {
       `;
     }).join("");
 
+    // Ignored integrations section
+    let ignoredHtml = "";
+    if (showIgnored) {
+      const sensor = findIgnoredItemsSensor(this._hass);
+      const items = sensor?.attributes?.excluded_integrations || [];
+      if (items.length > 0) {
+        const ignoredRows = items.map((i) => `
+          <div class="row ignored-row">
+            <ha-icon icon="mdi:eye-off" style="color:${COLOR.off}"></ha-icon>
+            <div class="info">
+              <span class="name" style="color:var(--secondary-text-color)">${i.name}</span>
+              <span class="secondary">${i.domain}</span>
+            </div>
+            <span class="value" style="color:var(--disabled-color)">${L.ignored}</span>
+          </div>
+        `).join("");
+        ignoredHtml = `
+          <div class="divider"></div>
+          <div class="ignored-header">${L.ignored_integrations}</div>
+          ${ignoredRows}
+        `;
+      }
+    }
+
     const footer = hidden > 0 ? `<div class="footer">${L.more_items(hidden, total)}</div>` : "";
 
     const header = title !== null ? `
@@ -294,6 +358,7 @@ class HaSentinelCard extends HTMLElement {
         <div class="card-content">
           ${summaryRow}
           ${rows || `<div class="empty">${L.no_error}</div>`}
+          ${ignoredHtml}
         </div>
         ${footer}
       </ha-card>
@@ -329,6 +394,7 @@ class HaSentinelDevicesCard extends HTMLElement {
 
     const L             = getLabels(this._hass);
     const showOk        = this._config.show_ok === true;
+    const showIgnored   = this._config.show_ignored === true;
     const maxItems      = this._config.max_items || 10;
     const title         = this._config.title ?? null;
     const groupBySource = this._config.group_by_source !== false;
@@ -375,6 +441,46 @@ class HaSentinelDevicesCard extends HTMLElement {
       rows = entities.map((e) => this._renderRow(e, L)).join("");
     }
 
+    // Ignored sources and devices section
+    let ignoredHtml = "";
+    if (showIgnored) {
+      const sensor = findIgnoredItemsSensor(this._hass);
+      const sources = sensor?.attributes?.ignored_device_sources || [];
+      const devices = sensor?.attributes?.ignored_devices || [];
+
+      let ignoredParts = "";
+
+      if (sources.length > 0) {
+        const sourceRows = sources.map((s) => `
+          <div class="row ignored-row">
+            <ha-icon icon="mdi:eye-off" style="color:${COLOR.off}"></ha-icon>
+            <div class="info">
+              <span class="name" style="color:var(--secondary-text-color)">${s}</span>
+            </div>
+            <span class="value" style="color:var(--disabled-color)">${L.ignored}</span>
+          </div>
+        `).join("");
+        ignoredParts += `<div class="ignored-header">${L.ignored_sources}</div>${sourceRows}`;
+      }
+
+      if (devices.length > 0) {
+        const deviceRows = devices.map((d) => `
+          <div class="row ignored-row">
+            <ha-icon icon="mdi:eye-off" style="color:${COLOR.off}"></ha-icon>
+            <div class="info">
+              <span class="name" style="color:var(--secondary-text-color)">${d.name}</span>
+            </div>
+            <span class="value" style="color:var(--disabled-color)">${L.ignored}</span>
+          </div>
+        `).join("");
+        ignoredParts += `<div class="ignored-header">${L.ignored_devices}</div>${deviceRows}`;
+      }
+
+      if (ignoredParts) {
+        ignoredHtml = `<div class="divider"></div>${ignoredParts}`;
+      }
+    }
+
     const footer = hidden > 0 ? `<div class="footer">${L.more_items(hidden, total)}</div>` : "";
 
     const header = title !== null ? `
@@ -390,6 +496,7 @@ class HaSentinelDevicesCard extends HTMLElement {
         <div class="card-content">
           ${summaryRow}
           ${rows || `<div class="empty">${L.no_error}</div>`}
+          ${ignoredHtml}
         </div>
         ${footer}
       </ha-card>
@@ -451,10 +558,11 @@ class HaSentinelAppsCard extends HTMLElement {
   _render() {
     if (!this._config) return;
 
-    const L        = getLabels(this._hass);
-    const showOk   = this._config.show_ok === true;
-    const maxItems = this._config.max_items || 10;
-    const title    = this._config.title ?? null;
+    const L           = getLabels(this._hass);
+    const showOk      = this._config.show_ok === true;
+    const showIgnored = this._config.show_ignored === true;
+    const maxItems    = this._config.max_items || 10;
+    const title       = this._config.title ?? null;
 
     const allEntities  = this._getAppsEntities();
     const problemCount = allEntities.filter((e) => e.state === "on").length;
@@ -505,6 +613,30 @@ class HaSentinelAppsCard extends HTMLElement {
       `;
     }).join("");
 
+    // Ignored add-ons section
+    let ignoredHtml = "";
+    if (showIgnored) {
+      const sensor = findIgnoredItemsSensor(this._hass);
+      const items = sensor?.attributes?.ignored_addons || [];
+      if (items.length > 0) {
+        const ignoredRows = items.map((a) => `
+          <div class="row ignored-row">
+            <ha-icon icon="mdi:eye-off" style="color:${COLOR.off}"></ha-icon>
+            <div class="info">
+              <span class="name" style="color:var(--secondary-text-color)">${a.name}</span>
+              ${a.slug !== a.name ? `<span class="secondary">${a.slug}</span>` : ""}
+            </div>
+            <span class="value" style="color:var(--disabled-color)">${L.ignored}</span>
+          </div>
+        `).join("");
+        ignoredHtml = `
+          <div class="divider"></div>
+          <div class="ignored-header">${L.ignored_apps}</div>
+          ${ignoredRows}
+        `;
+      }
+    }
+
     const footer = hidden > 0 ? `<div class="footer">${L.more_items(hidden, total)}</div>` : "";
 
     const header = title !== null ? `
@@ -520,6 +652,7 @@ class HaSentinelAppsCard extends HTMLElement {
         <div class="card-content">
           ${summaryRow}
           ${rows || `<div class="empty">${L.no_error}</div>`}
+          ${ignoredHtml}
         </div>
         ${footer}
       </ha-card>
@@ -529,6 +662,137 @@ class HaSentinelAppsCard extends HTMLElement {
 }
 
 customElements.define("ha-sentinel-apps-card", HaSentinelAppsCard);
+
+// ---------------------------------------------------------------------------
+// HaSentinelIgnoredCard — dedicated card showing all intentional exclusions
+// ---------------------------------------------------------------------------
+
+class HaSentinelIgnoredCard extends HTMLElement {
+  set hass(hass) {
+    this._hass = hass;
+    this._render();
+  }
+
+  setConfig(config) {
+    this._config = config;
+    if (this._hass) this._render();
+  }
+
+  getCardSize() { return 4; }
+
+  connectedCallback() { this._render(); }
+
+  _render() {
+    if (!this._config) return;
+
+    const L     = getLabels(this._hass);
+    const title = this._config.title ?? null;
+    const sensor = findIgnoredItemsSensor(this._hass);
+
+    const header = title ? `
+      <div class="card-header">
+        <ha-icon icon="mdi:eye-off" class="header-icon"></ha-icon>
+        <span>${title}</span>
+      </div>
+    ` : "";
+
+    if (!sensor) {
+      this.innerHTML = `
+        <ha-card>
+          ${header}
+          <div class="card-content">
+            <div class="empty">${L.ignored_sensor_missing}</div>
+          </div>
+        </ha-card>
+        <style>${SHARED_CSS}</style>
+      `;
+      return;
+    }
+
+    const attrs = sensor.attributes;
+    const sections = [];
+
+    // --- Excluded integrations ---
+    const integrations = attrs.excluded_integrations || [];
+    if (integrations.length > 0) {
+      sections.push(`<div class="ignored-header">${L.ignored_integrations}</div>`);
+      for (const item of integrations) {
+        sections.push(`
+          <div class="row ignored-row">
+            <ha-icon icon="mdi:puzzle-outline" style="color:${COLOR.off}"></ha-icon>
+            <div class="info">
+              <div class="name">${item.name}</div>
+              ${item.domain && item.domain !== "?" ? `<div class="secondary">${item.domain}</div>` : ""}
+            </div>
+          </div>
+        `);
+      }
+    }
+
+    // --- Ignored device sources ---
+    const sources = attrs.ignored_device_sources || [];
+    if (sources.length > 0) {
+      sections.push(`<div class="ignored-header">${L.ignored_sources}</div>`);
+      for (const source of sources) {
+        sections.push(`
+          <div class="row ignored-row">
+            <ha-icon icon="mdi:chip" style="color:${COLOR.off}"></ha-icon>
+            <div class="info">
+              <div class="name">${source}</div>
+            </div>
+          </div>
+        `);
+      }
+    }
+
+    // --- Ignored individual devices ---
+    const devices = attrs.ignored_devices || [];
+    if (devices.length > 0) {
+      sections.push(`<div class="ignored-header">${L.ignored_devices}</div>`);
+      for (const device of devices) {
+        sections.push(`
+          <div class="row ignored-row">
+            <ha-icon icon="mdi:devices" style="color:${COLOR.off}"></ha-icon>
+            <div class="info">
+              <div class="name">${device.name}</div>
+            </div>
+          </div>
+        `);
+      }
+    }
+
+    // --- Ignored add-ons ---
+    const addons = attrs.ignored_addons || [];
+    if (addons.length > 0) {
+      sections.push(`<div class="ignored-header">${L.ignored_apps}</div>`);
+      for (const addon of addons) {
+        sections.push(`
+          <div class="row ignored-row">
+            <ha-icon icon="mdi:package-variant" style="color:${COLOR.off}"></ha-icon>
+            <div class="info">
+              <div class="name">${addon.name}</div>
+              ${addon.slug !== addon.name ? `<div class="secondary">${addon.slug}</div>` : ""}
+            </div>
+          </div>
+        `);
+      }
+    }
+
+    const content = sections.length > 0
+      ? sections.join("")
+      : `<div class="empty">${L.no_exclusions}</div>`;
+
+    this.innerHTML = `
+      <ha-card>
+        ${header}
+        <div class="card-content">${content}</div>
+      </ha-card>
+      <style>${SHARED_CSS}</style>
+    `;
+  }
+}
+
+customElements.define("ha-sentinel-ignored-card", HaSentinelIgnoredCard);
 
 window.customCards = window.customCards || [];
 window.customCards.push({
@@ -549,6 +813,13 @@ window.customCards.push({
   type: "ha-sentinel-apps-card",
   name: "Sentinel Apps Card",
   description: "Health status of your HA OS applications (add-ons). Requires the Sentinel integration (HA OS only).",
+  preview: false,
+  documentationURL: "https://github.com/GuiPoM/lovelace-ha-sentinel",
+});
+window.customCards.push({
+  type: "ha-sentinel-ignored-card",
+  name: "Sentinel Ignored Card",
+  description: "List of intentionally excluded items (integrations, devices, add-ons). Requires the Sentinel integration.",
   preview: false,
   documentationURL: "https://github.com/GuiPoM/lovelace-ha-sentinel",
 });
